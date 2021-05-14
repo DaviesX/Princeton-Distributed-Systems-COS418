@@ -134,7 +134,7 @@ func (mr *Master) killWorkers() []int {
 		debug("Master: shutdown worker %s\n", w)
 		var reply ShutdownReply
 		ok := call(w, "Worker.Shutdown", new(struct{}), &reply)
-		if ok == false {
+		if !ok {
 			fmt.Printf("Master: RPC %s shutdown error\n", w)
 		} else {
 			ntasks = append(ntasks, reply.Ntasks)
