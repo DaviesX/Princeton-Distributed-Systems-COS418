@@ -73,7 +73,7 @@ func check(t *testing.T, files []string) {
 		text := outputScanner.Text()
 		n, err := fmt.Sscanf(lines[i], "%d", &v1)
 		if n == 1 && err == nil {
-			n, err = fmt.Sscanf(text, "%d", &v2)
+			_, err = fmt.Sscanf(text, "%d", &v2)
 		}
 		if err != nil || v1 != v2 {
 			t.Fatalf("line %d: %d != %d err %v\n", i, v1, v2, err)
@@ -193,7 +193,6 @@ func TestManyFailures(t *testing.T) {
 		case done = <-mr.doneChannel:
 			check(t, mr.files)
 			cleanup(mr)
-			break
 		default:
 			// Start 2 workers each sec. The workers fail after 10 tasks
 			w := port("worker" + strconv.Itoa(i))
