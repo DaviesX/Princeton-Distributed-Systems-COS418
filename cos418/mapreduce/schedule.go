@@ -62,37 +62,24 @@ func WorkerSourceListener(
 }
 
 // Launches a new task on the scheduled worker and returns the worker back to
-// the pool once the task is complete.
+// the pool once the task is complete. If the task fails, it retrieves another
+// worker from the worker pool and discards the worker incurs the failure.
 func RunTaskOnWorker(
 	scheduledWorker string,
 	task DoTaskArgs,
 	idleWorkerPool *chan string,
+	taskWaitGroup *sync.WaitGroup,
 ) {
-	call(scheduledWorker, "Worker.DoTask", task, new(struct{}))
-	*idleWorkerPool <- scheduledWorker
-}
+	defer taskWaitGroup.Done()
 
-// This synchronization ensures everything that can possible exist in the
-// worker pool before calling this function will get taken out (It may take out
-// newly registered workers too, but it's irrelavent). This is guaranteed
-// because when i reaches the end of the worker list, it is the moment when no
-// new worker is able to be put into the work pool, and there were exactly i
-// items in the pool. Therefore, i == len(workerList) is a sufficient condition
-// for having popped out all elements from the worker pool.
-func SyncWithAllWorkers(
-	existingWorkerList []string,
-	workerListMutex *sync.Mutex,
-	idleWorkerPool *chan string,
-) {
-	for i := 0; ; i++ {
-		workerListMutex.Lock()
-		if i == len(existingWorkerList) {
-			workerListMutex.Unlock()
+	for {
+		ok := call(scheduledWorker, "Worker.DoTask", task, new(struct{}))
+		if ok {
+			*idleWorkerPool <- scheduledWorker
 			break
 		}
-		workerListMutex.Unlock()
 
-		<-*idleWorkerPool
+		scheduledWorker = <-*idleWorkerPool
 	}
 }
 
@@ -113,7 +100,7 @@ func (mr *Master) schedule(phase jobPhase) {
 
 	// Initializes the worker pool and listens events to add new workers to the
 	// pool.
-	idleWorkerPool := make(chan string)
+	idleWorkerPool := make(chan string, ntasks)
 	defer close(idleWorkerPool)
 
 	go WorkerSourceListener(
@@ -124,6 +111,8 @@ func (mr *Master) schedule(phase jobPhase) {
 	// Remember that workers may fail, and that any given worker may finish
 	// multiple tasks.
 	fmt.Printf("Sheduling at phase=%s\n", phase)
+
+	var taskWaitGroup sync.WaitGroup
 	for i := 0; i < ntasks; i++ {
 		scheduledWorker := <-idleWorkerPool
 
@@ -136,13 +125,14 @@ func (mr *Master) schedule(phase jobPhase) {
 		task.TaskNumber = i
 		task.NumOtherPhase = nios
 
+		taskWaitGroup.Add(1)
 		go RunTaskOnWorker(
-			scheduledWorker, task, &idleWorkerPool)
+			scheduledWorker, task, &idleWorkerPool, &taskWaitGroup)
 	}
 
 	// Sychronizes with workers to make sure all tasks are finished after this
 	// point.
-	SyncWithAllWorkers(mr.workers, &mr.Mutex, &idleWorkerPool)
+	taskWaitGroup.Wait()
 
 	// Stop the worker registration listener since all tasks have been
 	// completed.
