@@ -1,10 +1,12 @@
 package raft
 
-import "cos418/cos418/labrpc"
+import (
+	"cos418/cos418/labrpc"
+)
 
 type AppendEntriesArgs struct {
-	leaderTerm int
-	leaderId   int
+	LeaderTerm int
+	LeaderId   int
 }
 
 type AppendEntriesReply struct {
@@ -19,13 +21,13 @@ func (rf *Raft) AppendEntries(
 ) {
 	rf.mu.Lock()
 
-	if args.leaderTerm < rf.currentTerm {
+	if args.LeaderTerm < rf.currentTerm {
 		// Reject an out-of-date leader.
 		rf.mu.Unlock()
 		return
 	}
 
-	rf.currentTerm = args.leaderTerm
+	rf.currentTerm = args.LeaderTerm
 	rf.lastApplied++
 
 	rf.mu.Unlock()

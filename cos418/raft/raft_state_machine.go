@@ -10,8 +10,8 @@ import (
 
 const (
 	HeartbeatInterval         = 50
-	HeartbeatTimeoutMinMicros = HeartbeatInterval + 100
-	HeartbeatTimeoutMaxMicros = HeartbeatInterval + 250
+	HeartbeatTimeoutMinMicros = 3 * HeartbeatInterval
+	HeartbeatTimeoutMaxMicros = 6 * HeartbeatInterval
 	ElectionTimeout           = HeartbeatTimeoutMaxMicros
 )
 
@@ -53,8 +53,8 @@ func SendHeartBeatAsync(
 	term int,
 ) {
 	var args AppendEntriesArgs
-	args.leaderId = from
-	args.leaderTerm = term
+	args.LeaderId = from
+	args.LeaderTerm = term
 
 	for i := 0; i < len(targets); i++ {
 		if i == from {
@@ -91,8 +91,8 @@ func RunRaftStateMachine(rf *Raft) {
 
 			if rf.lastApplied == lastEntry {
 				// Haven't received any message from the leader for some time.
-				fmt.Printf("At node=%d|term=%d: no heartbeat from the leader, becoming candidate.\n",
-					rf.me, rf.currentTerm)
+				fmt.Printf("At node=%d|term=%d: lastApplied=%d unchanged, no heartbeat from the leader, becoming candidate.\n",
+					rf.me, rf.currentTerm, lastEntry)
 
 				rf.role = RaftCandidate
 				termToKeep = rf.currentTerm + 1
