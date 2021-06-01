@@ -48,14 +48,16 @@ package labrpc
 //   pass svc to srv.AddService()
 //
 
-import "encoding/gob"
-import "bytes"
-import "reflect"
-import "sync"
-import "log"
-import "strings"
-import "math/rand"
-import "time"
+import (
+	"bytes"
+	"encoding/gob"
+	"log"
+	"math/rand"
+	"reflect"
+	"strings"
+	"sync"
+	"time"
+)
 
 type reqMsg struct {
 	endname  interface{} // name of sending ClientEnd
@@ -410,7 +412,7 @@ func MakeService(rcvr interface{}) *Service {
 			mtype.In(2).Kind() != reflect.Ptr ||
 			mtype.NumOut() != 0 {
 			// the method is not suitable for a handler
-			//fmt.Printf("bad method: %v\n", mname)
+			// fmt.Printf("bad method: %v\n", mname)
 		} else {
 			// the method looks like a handler
 			svc.methods[mname] = method

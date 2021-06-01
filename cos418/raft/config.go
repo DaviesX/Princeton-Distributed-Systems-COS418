@@ -8,16 +8,18 @@ package raft
 // test with the original before submitting.
 //
 
-import "labrpc"
-import "log"
-import "sync"
-import "testing"
-import "runtime"
-import crand "crypto/rand"
-import "encoding/base64"
-import "sync/atomic"
-import "time"
-import "fmt"
+import (
+	"cos418/cos418/labrpc"
+	crand "crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"log"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
 
 func randstring(n int) string {
 	b := make([]byte, 2*n)
@@ -160,7 +162,7 @@ func (cfg *config) start1(i int) {
 				cfg.logs[i][m.Index] = v
 				cfg.mu.Unlock()
 
-				if m.Index > 1 && prevok == false {
+				if m.Index > 1 && !prevok {
 					err_msg = fmt.Sprintf("server %v apply out of order %v", i, m.Index)
 				}
 			} else {
