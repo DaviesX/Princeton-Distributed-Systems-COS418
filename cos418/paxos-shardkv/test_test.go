@@ -1,15 +1,17 @@
 package shardkv
 
-import "testing"
-import "shardmaster"
-import "runtime"
-import "strconv"
-import "os"
-import "time"
-import "fmt"
-import "sync"
-import "sync/atomic"
-import "math/rand"
+import (
+	"cos418/cos418/shardmaster"
+	"fmt"
+	"math/rand"
+	"os"
+	"runtime"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
 
 // information about the servers of one replica group.
 type tGroup struct {

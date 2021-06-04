@@ -1,13 +1,15 @@
 package raftkv
 
-import "testing"
-import "strconv"
-import "time"
-import "fmt"
-import "math/rand"
-import "log"
-import "strings"
-import "sync/atomic"
+import (
+	"fmt"
+	"log"
+	"math/rand"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
 
 // The tester generously allows solutions to complete elections in one second
 // (much more than the paper's range of timeouts).
@@ -393,5 +395,3 @@ func TestPersistPartitionUnreliable(t *testing.T) {
 	fmt.Printf("Test: persistence with concurrent clients and repartitioning servers, unreliable...\n")
 	GenericTest(t, "persistpartunreliable", 5, true, true, true, -1)
 }
-
-

@@ -1,22 +1,25 @@
 package diskv
 
-import "testing"
-import "shardmaster"
-import "runtime"
-import "strconv"
-import "strings"
-import "os"
-import "os/exec"
-import "time"
-import "fmt"
-import "sync"
-import "io/ioutil"
-import "log"
-import "math/rand"
-import crand "crypto/rand"
-import "encoding/base64"
-import "path/filepath"
-import "sync/atomic"
+import (
+	"cos418/cos418/shardmaster"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"math/rand"
+	"os"
+	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	crand "crypto/rand"
+	"encoding/base64"
+	"path/filepath"
+	"sync/atomic"
+)
 
 type tServer struct {
 	p       *os.Process

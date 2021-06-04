@@ -1,10 +1,11 @@
 package kvpaxos
 
-import "net/rpc"
-import "crypto/rand"
-import "math/big"
-
-import "fmt"
+import (
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"net/rpc"
+)
 
 type Clerk struct {
 	servers []string

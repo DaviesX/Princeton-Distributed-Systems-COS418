@@ -1,11 +1,11 @@
 package shardmaster
 
-
-import "raft"
-import "labrpc"
-import "sync"
-import "encoding/gob"
-
+import (
+	"cos418/cos418/labrpc"
+	"cos418/cos418/raft"
+	"encoding/gob"
+	"sync"
+)
 
 type ShardMaster struct {
 	mu      sync.Mutex
@@ -18,11 +18,9 @@ type ShardMaster struct {
 	configs []Config // indexed by config num
 }
 
-
 type Op struct {
 	// Your data here.
 }
-
 
 func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
 	// Your code here.
@@ -39,7 +37,6 @@ func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
 func (sm *ShardMaster) Query(args *QueryArgs, reply *QueryReply) {
 	// Your code here.
 }
-
 
 //
 // the tester calls Kill() when a ShardMaster instance won't

@@ -1,9 +1,10 @@
 package raftkv
 
-import "labrpc"
-import "crypto/rand"
-import "math/big"
-
+import (
+	"cos418/cos418/labrpc"
+	"crypto/rand"
+	"math/big"
+)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd

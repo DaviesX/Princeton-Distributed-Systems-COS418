@@ -1,13 +1,15 @@
 package viewservice
 
-import "net"
-import "net/rpc"
-import "log"
-import "time"
-import "sync"
-import "fmt"
-import "os"
-import "sync/atomic"
+import (
+	"fmt"
+	"log"
+	"net"
+	"net/rpc"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 type ViewServer struct {
 	mu       sync.Mutex
@@ -15,7 +17,6 @@ type ViewServer struct {
 	dead     int32 // for testing
 	rpccount int32 // for testing
 	me       string
-
 
 	// Your declarations here.
 }
@@ -39,7 +40,6 @@ func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 
 	return nil
 }
-
 
 //
 // tick() is called once per PingInterval; it should notice

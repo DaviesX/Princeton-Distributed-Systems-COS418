@@ -5,9 +5,11 @@ package shardmaster
 // Please don't change this file.
 //
 
-import "net/rpc"
-import "time"
-import "fmt"
+import (
+	"fmt"
+	"net/rpc"
+	"time"
+)
 
 type Clerk struct {
 	servers []string // shardmaster replicas

@@ -1,11 +1,13 @@
 package viewservice
 
-import "testing"
-import "runtime"
-import "time"
-import "fmt"
-import "os"
-import "strconv"
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"testing"
+	"time"
+)
 
 func check(t *testing.T, ck *Clerk, p string, b string, n uint) {
 	view, _ := ck.Get()

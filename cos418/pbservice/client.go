@@ -1,12 +1,12 @@
 package pbservice
 
-import "viewservice"
-import "net/rpc"
-import "fmt"
-
-import "crypto/rand"
-import "math/big"
-
+import (
+	"cos418/cos418/viewservice"
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"net/rpc"
+)
 
 type Clerk struct {
 	vs *viewservice.Clerk
@@ -28,7 +28,6 @@ func MakeClerk(vshost string, me string) *Clerk {
 
 	return ck
 }
-
 
 //
 // call() sends an RPC to the rpcname handler on server srv

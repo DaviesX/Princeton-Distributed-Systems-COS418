@@ -1,12 +1,14 @@
 package shardkv
 
-import "shardmaster"
-import "net/rpc"
-import "time"
-import "sync"
-import "fmt"
-import "crypto/rand"
-import "math/big"
+import (
+	"cos418/cos418/shardmaster"
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"net/rpc"
+	"sync"
+	"time"
+)
 
 type Clerk struct {
 	mu     sync.Mutex // one RPC at a time
