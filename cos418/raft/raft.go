@@ -18,13 +18,12 @@ package raft
 //
 
 import (
+	"bytes"
 	"cos418/cos418/labrpc"
+	"encoding/gob"
 	"fmt"
 	"sync"
 )
-
-// import "bytes"
-// import "encoding/gob"
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -56,13 +55,14 @@ type Raft struct {
 	me        int // index into peers[]
 	applyCh   chan ApplyMsg
 
-	// Your data here.
-	// Look at the paper's Figure 2 for a description of what
-	// state a Raft server must maintain.
+	// Persistent state.
 	currentTerm int
+	logs        []interface{}
+
+	// Volatile state.
 	role        RaftRole
+	commitIndex int
 	lastApplied int
-	// votedForCandidId int
 
 	done bool
 }
@@ -73,36 +73,30 @@ func (rf *Raft) GetState() (int, bool) {
 	return rf.currentTerm, rf.role == RaftLeader
 }
 
-//
-// save Raft's persistent state to stable storage,
+// Saves Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
 // see paper's Figure 2 for a description of what should be persistent.
-//
 func (rf *Raft) persist() {
-	// Your code here.
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := gob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	outputBuffer := new(bytes.Buffer)
+	encoder := gob.NewEncoder(outputBuffer)
+
+	encoder.Encode(rf.currentTerm)
+	encoder.Encode(rf.logs)
+
+	data := outputBuffer.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
-//
-// restore previously persisted state.
-//
+// Restores previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
-	// Your code here.
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := gob.NewDecoder(r)
-	// d.Decode(&rf.xxx)
-	// d.Decode(&rf.yyy)
+	inputBuffer := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(inputBuffer)
+
+	decoder.Decode(&rf.currentTerm)
+	decoder.Decode(&rf.logs)
 }
 
-//
-// the service using Raft (e.g. a k/v server) wants to start
+// The service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the
 // agreement and return immediately. there is no guarantee that this
@@ -113,24 +107,22 @@ func (rf *Raft) readPersist(data []byte) {
 // if it's ever committed. the second return value is the current
 // term. the third return value is true if this server believes it is
 // the leader.
-//
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	return -1, rf.currentTerm, rf.role == RaftLeader
 }
 
-//
-// the tester calls Kill() when a Raft instance won't
+// The tester calls Kill() when a Raft instance won't
 // be needed again. you are not required to do anything
 // in Kill(), but it might be convenient to (for example)
 // turn off debug output from this instance.
-//
 func (rf *Raft) Kill() {
-	fmt.Println("Stopping the raft state mahcine...")
+	fmt.Printf("At node=%d, stopping the raft state mahcine...\n", rf.me)
+
+	// TODO: Sychronizes with the state machine.
 	rf.done = true
 }
 
-//
-// the service or tester wants to create a Raft server. the ports
+// The service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
 // server's port is peers[me]. all the servers' peers[] arrays
 // have the same order. persister is a place for this server to
@@ -139,7 +131,6 @@ func (rf *Raft) Kill() {
 // tester or service expects Raft to send ApplyMsg messages.
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
-//
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
@@ -149,17 +140,18 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyCh = applyCh
 
 	rf.currentTerm = 0
-	// rf.votedForCandidId = -1
-	rf.role = RaftFollower
+	rf.logs = make([]interface{}, 0)
 
+	rf.role = RaftFollower
+	rf.commitIndex = 0
 	rf.lastApplied = 0
 
 	rf.done = false
 
-	// initialize from state persisted before a crash
+	// Initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	fmt.Println("Starting the raft state mahcine...")
+	fmt.Printf("At node=%d, starting the raft state mahcine...\n", rf.me)
 	go RunRaftStateMachine(rf)
 
 	return rf
