@@ -9,7 +9,7 @@ type RequestVoteArgs struct {
 }
 
 type RequestVoteReply struct {
-	Success bool
+	VoteGranted bool
 }
 
 // Each raft node can only vote once per term. If the raft node has a ballot
@@ -24,7 +24,7 @@ func (rf *Raft) RequestVote(
 	if args.CandidateTerm <= rf.currentTerm {
 		rf.mu.Unlock()
 
-		reply.Success = false
+		reply.VoteGranted = false
 		return
 	}
 
@@ -32,7 +32,7 @@ func (rf *Raft) RequestVote(
 
 	rf.mu.Unlock()
 
-	reply.Success = true
+	reply.VoteGranted = true
 }
 
 func SendRequestVote(

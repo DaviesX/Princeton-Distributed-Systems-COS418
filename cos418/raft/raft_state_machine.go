@@ -27,7 +27,7 @@ func CollectVoteFrom(
 	var reply RequestVoteReply
 
 	ok := SendRequestVote(target, args, &reply)
-	if !ok || !reply.Success {
+	if !ok || !reply.VoteGranted {
 		return
 	}
 
