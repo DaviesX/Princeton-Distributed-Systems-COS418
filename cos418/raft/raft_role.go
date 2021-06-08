@@ -47,7 +47,7 @@ func StartElectionAsync(term int, peers []*labrpc.ClientEnd) *int {
 	return voteCount
 }
 
-func SendHeartBeatAsync(
+func SendHeartbeatAsync(
 	from int,
 	targets []*labrpc.ClientEnd,
 	term int,
@@ -75,7 +75,7 @@ func SendHeartBeatAsync(
 //                  |^|                                                  ||
 //                   ==================== higher term ====================
 //
-func RunRaftStateMachine(rf *Raft) {
+func MaintainRaftRole(rf *Raft) {
 	const NilTerm = -1
 
 	termToKeep := NilTerm
@@ -83,16 +83,16 @@ func RunRaftStateMachine(rf *Raft) {
 	for !rf.done {
 		switch rf.role {
 		case RaftFollower:
-			lastEntry := rf.lastApplied
+			lastAppendRpcIndex := rf.lastAppendRpcIndex
 
 			timeout := time.Duration(HeartbeatTimeoutMinMicros +
 				rand.Intn(HeartbeatTimeoutMaxMicros-HeartbeatTimeoutMinMicros))
 			time.Sleep(timeout * time.Millisecond)
 
-			if rf.lastApplied == lastEntry {
+			if rf.lastAppendRpcIndex == lastAppendRpcIndex {
 				// Haven't received any message from the leader for some time.
-				fmt.Printf("At node=%d|term=%d: lastApplied=%d unchanged, no heartbeat from the leader, becoming candidate.\n",
-					rf.me, rf.currentTerm, lastEntry)
+				fmt.Printf("At node=%d|term=%d: no heartbeat from the leader, becoming candidate.\n",
+					rf.me, rf.currentTerm)
 
 				rf.role = RaftCandidate
 				termToKeep = rf.currentTerm + 1
@@ -127,7 +127,7 @@ func RunRaftStateMachine(rf *Raft) {
 				termToKeep++
 			}
 		case RaftLeader:
-			SendHeartBeatAsync(rf.me, rf.peers, termToKeep)
+			SendHeartbeatAsync(rf.me, rf.peers, termToKeep)
 			time.Sleep(HeartbeatInterval * time.Millisecond)
 
 			newTerm, _ := rf.GetState()

@@ -45,6 +45,11 @@ const (
 	RaftLeader    RaftRole = 3
 )
 
+type LogEntry struct {
+	term    int
+	command interface{}
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -57,12 +62,11 @@ type Raft struct {
 
 	// Persistent state.
 	currentTerm int
-	logs        []interface{}
+	logs        []LogEntry
 
 	// Volatile state.
-	role        RaftRole
-	commitIndex int
-	lastApplied int
+	role               RaftRole
+	lastAppendRpcIndex int
 
 	done bool
 }
@@ -108,7 +112,12 @@ func (rf *Raft) readPersist(data []byte) {
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	return -1, rf.currentTerm, rf.role == RaftLeader
+	switch rf.role {
+	case RaftLeader:
+		return -1, rf.currentTerm, true
+	default:
+		return -1, rf.currentTerm, false
+	}
 }
 
 // The tester calls Kill() when a Raft instance won't
@@ -116,9 +125,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // in Kill(), but it might be convenient to (for example)
 // turn off debug output from this instance.
 func (rf *Raft) Kill() {
-	fmt.Printf("At node=%d, stopping the raft state mahcine...\n", rf.me)
+	fmt.Printf("At node=%d, stopping the raft role maintainer...\n", rf.me)
 
-	// TODO: Sychronizes with the state machine.
+	// TODO: Sychronizes with the raft role maintainer.
 	rf.done = true
 }
 
@@ -140,19 +149,18 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyCh = applyCh
 
 	rf.currentTerm = 0
-	rf.logs = make([]interface{}, 0)
+	rf.logs = make([]LogEntry, 0)
 
 	rf.role = RaftFollower
-	rf.commitIndex = 0
-	rf.lastApplied = 0
+	rf.lastAppendRpcIndex = 0
 
 	rf.done = false
 
 	// Initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	fmt.Printf("At node=%d, starting the raft state mahcine...\n", rf.me)
-	go RunRaftStateMachine(rf)
+	fmt.Printf("At node=%d, starting the raft role maintainer...\n", rf.me)
+	go MaintainRaftRole(rf)
 
 	return rf
 }
