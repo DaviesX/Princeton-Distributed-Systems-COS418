@@ -65,8 +65,8 @@ type Raft struct {
 	logs        []LogEntry
 
 	// Volatile state.
-	role               RaftRole
-	lastAppendRpcIndex int
+	role                   RaftRole
+	lastAppendRpcTimestamp int
 
 	done bool
 }
@@ -152,7 +152,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.logs = make([]LogEntry, 0)
 
 	rf.role = RaftFollower
-	rf.lastAppendRpcIndex = 0
+	rf.lastAppendRpcTimestamp = 0
 
 	rf.done = false
 

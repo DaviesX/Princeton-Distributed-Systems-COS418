@@ -28,7 +28,7 @@ func (rf *Raft) AppendEntries(
 	}
 
 	rf.currentTerm = args.LeaderTerm
-	rf.lastAppendRpcIndex++
+	rf.lastAppendRpcTimestamp++
 
 	rf.mu.Unlock()
 }

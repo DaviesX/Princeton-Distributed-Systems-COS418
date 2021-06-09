@@ -83,13 +83,13 @@ func MaintainRaftRole(rf *Raft) {
 	for !rf.done {
 		switch rf.role {
 		case RaftFollower:
-			lastAppendRpcIndex := rf.lastAppendRpcIndex
+			lastAppendRpcTimestamp := rf.lastAppendRpcTimestamp
 
 			timeout := time.Duration(HeartbeatTimeoutMinMicros +
 				rand.Intn(HeartbeatTimeoutMaxMicros-HeartbeatTimeoutMinMicros))
 			time.Sleep(timeout * time.Millisecond)
 
-			if rf.lastAppendRpcIndex == lastAppendRpcIndex {
+			if rf.lastAppendRpcTimestamp == lastAppendRpcTimestamp {
 				// Haven't received any message from the leader for some time.
 				fmt.Printf("At node=%d|term=%d: no heartbeat from the leader, becoming candidate.\n",
 					rf.me, rf.currentTerm)
