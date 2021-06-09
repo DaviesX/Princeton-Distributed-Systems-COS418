@@ -37,19 +37,6 @@ type ApplyMsg struct {
 	Snapshot    []byte // ignore for lab2; only used in lab3
 }
 
-type RaftRole int
-
-const (
-	RaftFollower  RaftRole = 1
-	RaftCandidate RaftRole = 2
-	RaftLeader    RaftRole = 3
-)
-
-type LogEntry struct {
-	term    int
-	command interface{}
-}
-
 //
 // A Go object implementing a single Raft peer.
 //
