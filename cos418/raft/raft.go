@@ -37,6 +37,16 @@ type ApplyMsg struct {
 	Snapshot    []byte // ignore for lab2; only used in lab3
 }
 
+type LeaderKnowledge struct {
+	peerLogProgresses []int
+}
+
+func NewLeaderKnowledge(numPeers int) *LeaderKnowledge {
+	lk := new(LeaderKnowledge)
+	lk.peerLogProgresses = make([]int, numPeers)
+	return lk
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -54,6 +64,9 @@ type Raft struct {
 	// Volatile state.
 	role                   RaftRole
 	lastAppendRpcTimestamp int
+	commitProgress         int
+	stateMachineProgress   int
+	leaderKnowledge        *LeaderKnowledge
 
 	done bool
 }
@@ -101,7 +114,39 @@ func (rf *Raft) readPersist(data []byte) {
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	switch rf.role {
 	case RaftLeader:
-		return -1, rf.currentTerm, true
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+
+		// Creates the log entry and updates the log buffer.
+		var newEntry LogEntry
+		newEntry.Command = command
+		newEntry.Term = rf.currentTerm
+
+		rf.logs = append(rf.logs, newEntry)
+		rf.persist()
+
+		rf.leaderKnowledge.peerLogProgresses[rf.me] = len(rf.logs)
+
+		// Starts agreement and publishes logs to the followers for
+		// replication.
+		newLeaderKnowledge, err := PublishLogs(
+			rf.me, rf.currentTerm, rf.commitProgress,
+			rf.logs,
+			rf.peers, rf.leaderKnowledge)
+		if err != nil {
+			fmt.Printf(
+				"At node=%d|term=%d, encountered error=%s\n",
+				rf.me, rf.currentTerm, err.Error())
+		}
+
+		globalCommitProgress := CommitProgress(*newLeaderKnowledge)
+
+		rf.commitProgress, rf.stateMachineProgress =
+			SyncWithGlobalCommitProgress(
+				globalCommitProgress, rf.commitProgress,
+				rf.stateMachineProgress, rf.logs, rf.applyCh)
+
+		return len(rf.logs) - 1, rf.currentTerm, true
 	default:
 		return -1, rf.currentTerm, false
 	}
@@ -140,6 +185,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.role = RaftFollower
 	rf.lastAppendRpcTimestamp = 0
+	rf.commitProgress = 0
+	rf.stateMachineProgress = 0
+	rf.leaderKnowledge = NewLeaderKnowledge(len(peers))
 
 	rf.done = false
 

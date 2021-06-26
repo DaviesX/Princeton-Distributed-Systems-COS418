@@ -25,12 +25,18 @@ const (
 
 func CollectVoteFrom(
 	target *labrpc.ClientEnd,
+	candidateId int,
 	term int,
+	logProgress int,
+	highestLogTerm int,
 	voteCount *int,
 	voteCountMutex *sync.Mutex,
 ) {
 	var args RequestVoteArgs
+	args.CandidateId = candidateId
 	args.CandidateTerm = term
+	args.CandidateLogProgress = logProgress
+	args.CandidateHighestLogTerm = highestLogTerm
 
 	var reply RequestVoteReply
 
@@ -44,12 +50,21 @@ func CollectVoteFrom(
 	voteCountMutex.Unlock()
 }
 
-func StartElectionAsync(term int, peers []*labrpc.ClientEnd) *int {
+func StartElectionAsync(
+	candidateId int,
+	term int,
+	logProgress int,
+	highestLogTerm int,
+	peers []*labrpc.ClientEnd,
+) *int {
 	voteCount := new(int)
 	voteCountMutex := new(sync.Mutex)
 
 	for i := 0; i < len(peers); i++ {
-		go CollectVoteFrom(peers[i], term, voteCount, voteCountMutex)
+		go CollectVoteFrom(
+			peers[i], candidateId,
+			term, logProgress, highestLogTerm,
+			voteCount, voteCountMutex)
 	}
 
 	return voteCount
@@ -57,19 +72,24 @@ func StartElectionAsync(term int, peers []*labrpc.ClientEnd) *int {
 
 func SendHeartbeatAsync(
 	from int,
+	senderCommitProgress int,
 	targets []*labrpc.ClientEnd,
 	term int,
 ) {
-	var args AppendEntriesArgs
+	args := new(AppendEntriesArgs)
 	args.LeaderId = from
 	args.LeaderTerm = term
+	args.StartIndex = 0
+	args.SerializedLogEntries = make([]byte, 0)
+	args.PrevLogTerm = 0
+	args.GlobalCommitProgress = senderCommitProgress
 
 	for i := 0; i < len(targets); i++ {
 		if i == from {
 			continue
 		}
 
-		go SendAppendEntries(targets[i], args, new(AppendEntriesReply))
+		go SendAppendEntries(targets[i], *args, new(AppendEntriesReply))
 	}
 }
 
@@ -106,7 +126,16 @@ func MaintainRaftRole(rf *Raft) {
 				termToKeep = rf.currentTerm + 1
 			}
 		case RaftCandidate:
-			voteCount := StartElectionAsync(termToKeep, rf.peers)
+			logProgress := len(rf.logs)
+			var highestLogTerm int
+			if logProgress == 0 {
+				highestLogTerm = 0
+			} else {
+				highestLogTerm = rf.logs[logProgress-1].Term
+			}
+
+			voteCount := StartElectionAsync(
+				rf.me, termToKeep, logProgress, highestLogTerm, rf.peers)
 
 			time.Sleep(ElectionTimeout * time.Millisecond)
 
@@ -135,7 +164,7 @@ func MaintainRaftRole(rf *Raft) {
 				termToKeep++
 			}
 		case RaftLeader:
-			SendHeartbeatAsync(rf.me, rf.peers, termToKeep)
+			SendHeartbeatAsync(rf.me, rf.commitProgress, rf.peers, termToKeep)
 			time.Sleep(HeartbeatInterval * time.Millisecond)
 
 			newTerm, _ := rf.GetState()
