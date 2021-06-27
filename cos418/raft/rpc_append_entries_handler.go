@@ -29,7 +29,6 @@ type AppendEntriesArgs struct {
 	StartIndex           int
 	PrevLogTerm          int // For concatenability check.
 	SerializedLogEntries []byte
-	GlobalCommitProgress int
 }
 
 type AppendEntriesReply struct {
@@ -57,28 +56,19 @@ func (rf *Raft) AppendEntries(
 		return
 	}
 
-	if len(rf.logs) > 0 && args.StartIndex > 0 &&
-		rf.logs[args.StartIndex-1].Term != args.PrevLogTerm {
-		// Fails to reconcile with the alien log source.
-		reply.Concatenable = false
-		reply.TermHold = rf.currentTerm
-		return
+	if len(rf.logs) > 0 && args.StartIndex > 0 {
+		if args.StartIndex > len(rf.logs) ||
+			rf.logs[args.StartIndex-1].Term != args.PrevLogTerm {
+			// Fails to reconcile with the alien log source.
+			reply.Concatenable = false
+			reply.TermHold = rf.currentTerm
+			return
+		}
 	}
-
-	// The node might not participate in a past election hence not learned
-	// that the term has moved up. So we will update it here (perhaps coming
-	// from a heartbeat).
-	rf.currentTerm = args.LeaderTerm
-	rf.lastAppendRpcTimestamp++
 
 	rf.logs = ReplicateForeignLogs(
 		args.SerializedLogEntries, args.StartIndex, rf.logs)
 	rf.persist()
-
-	rf.commitProgress, rf.stateMachineProgress =
-		SyncWithGlobalCommitProgress(
-			args.GlobalCommitProgress, rf.commitProgress,
-			rf.stateMachineProgress, rf.logs, rf.applyCh)
 
 	reply.Concatenable = true
 	reply.TermHold = rf.currentTerm

@@ -70,29 +70,6 @@ func StartElectionAsync(
 	return voteCount
 }
 
-func SendHeartbeatAsync(
-	from int,
-	senderCommitProgress int,
-	targets []*labrpc.ClientEnd,
-	term int,
-) {
-	args := new(AppendEntriesArgs)
-	args.LeaderId = from
-	args.LeaderTerm = term
-	args.StartIndex = 0
-	args.SerializedLogEntries = make([]byte, 0)
-	args.PrevLogTerm = 0
-	args.GlobalCommitProgress = senderCommitProgress
-
-	for i := 0; i < len(targets); i++ {
-		if i == from {
-			continue
-		}
-
-		go SendAppendEntries(targets[i], *args, new(AppendEntriesReply))
-	}
-}
-
 // It puts the node into the correct raft role by detecting the transition
 // condition. Or more precisely, it implements the state machine:
 //                                             == Re-elction ==
@@ -164,7 +141,7 @@ func MaintainRaftRole(rf *Raft) {
 				termToKeep++
 			}
 		case RaftLeader:
-			SendHeartbeatAsync(rf.me, rf.commitProgress, rf.peers, termToKeep)
+			SyncCommitProgressAsync(rf.me, rf.commitProgress, rf.peers, termToKeep)
 			time.Sleep(HeartbeatInterval * time.Millisecond)
 
 			newTerm, _ := rf.GetState()

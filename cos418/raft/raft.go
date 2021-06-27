@@ -130,7 +130,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		// Starts agreement and publishes logs to the followers for
 		// replication.
 		newLeaderKnowledge, err := PublishLogs(
-			rf.me, rf.currentTerm, rf.commitProgress,
+			rf.me, rf.currentTerm,
 			rf.logs,
 			rf.peers, rf.leaderKnowledge)
 		if err != nil {
@@ -139,14 +139,12 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 				rf.me, rf.currentTerm, err.Error())
 		}
 
-		globalCommitProgress := CommitProgress(*newLeaderKnowledge)
+		newCommitProgress := CommitProgress(*newLeaderKnowledge)
 
-		rf.commitProgress, rf.stateMachineProgress =
-			SyncWithGlobalCommitProgress(
-				globalCommitProgress, rf.commitProgress,
-				rf.stateMachineProgress, rf.logs, rf.applyCh)
+		SyncCommitProgressAsync(
+			rf.me, newCommitProgress, rf.peers, rf.currentTerm)
 
-		return len(rf.logs) - 1, rf.currentTerm, true
+		return len(rf.logs), rf.currentTerm, true
 	default:
 		return -1, rf.currentTerm, false
 	}

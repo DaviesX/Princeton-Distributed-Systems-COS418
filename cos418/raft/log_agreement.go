@@ -1,40 +1,11 @@
 package raft
 
 import (
-	"bytes"
 	"cos418/cos418/labrpc"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"sort"
 )
-
-// A log entry is a command timestamped by the leader's term when it's created.
-type LogEntry struct {
-	Term    int
-	Command interface{}
-}
-
-// Serializes a sequence of log entries into a transmittable byte array.
-func SerializeLogEntries(logs []LogEntry) []byte {
-	outputBuffer := new(bytes.Buffer)
-	encoder := gob.NewEncoder(outputBuffer)
-
-	encoder.Encode(logs)
-
-	return outputBuffer.Bytes()
-}
-
-// Deserializes content serialized by the SerializeLogEntries().
-func DeserializeLogEntries(serializedLogEntries []byte) []LogEntry {
-	inputBuffer := bytes.NewBuffer(serializedLogEntries)
-	decoder := gob.NewDecoder(inputBuffer)
-
-	logs := make([]LogEntry, 0)
-	decoder.Decode(&logs)
-
-	return logs
-}
 
 // Finds a concatenation point before which rids the peer of log conflicts
 // then overrides all log entries after it. To save time and bandwidth, it
@@ -45,7 +16,6 @@ func DeserializeLogEntries(serializedLogEntries []byte) []LogEntry {
 func SyncLogsWithPeer(
 	publishFrom int,
 	publisherTerm int,
-	publisherCommitProgress int,
 	allLogs []LogEntry,
 	peer *labrpc.ClientEnd,
 	peerReplicationProgress int,
@@ -69,7 +39,6 @@ func SyncLogsWithPeer(
 		} else {
 			arg.PrevLogTerm = allLogs[concatFrom-1].Term
 		}
-		arg.GlobalCommitProgress = publisherCommitProgress
 
 		var reply AppendEntriesReply
 		ok := SendAppendEntries(peer, arg, &reply)
@@ -97,12 +66,10 @@ func SyncLogsWithPeer(
 // then replicate the content. It takes in what the leader thinks each peer's
 // replication progress is and tries to push it towards the end. After that,
 // it returns the updated progresses for the caller to decide which logs have
-// reached censensus. Note, it will skip publishing to the publisher's own
-// node.
+// reached censensus.
 func PublishLogs(
 	publishFrom int,
 	publisherTerm int,
-	publisherCommitProgress int,
 	allLogs []LogEntry,
 	peers []*labrpc.ClientEnd,
 	leaderKnowledge *LeaderKnowledge,
@@ -122,7 +89,7 @@ func PublishLogs(
 
 		// TODO: Makes this call async.
 		newReplicationProgress, err := SyncLogsWithPeer(
-			publishFrom, publisherTerm, publisherCommitProgress,
+			publishFrom, publisherTerm,
 			allLogs,
 			peer, leaderKnowledge.peerLogProgresses[i])
 		if err != nil {
@@ -158,54 +125,18 @@ func CommitProgress(leaderKnowledge LeaderKnowledge) int {
 	}
 }
 
-// It sends all the specified log entries in [start, end) to the targetChannel
-// sequentially. It's a blocking process.
-func SendLogsToStateMachine(
-	logs []LogEntry,
-	start int,
-	end int,
-	targetChannel chan ApplyMsg,
+func SyncCommitProgressAsync(
+	from int,
+	leaderCommitProgress int,
+	targets []*labrpc.ClientEnd,
+	term int,
 ) {
-	for i := start; i < end; i++ {
-		var msg ApplyMsg
-		msg.Index = i
-		msg.Command = logs[i].Command
+	var args NotifyCommitProgressArgs
+	args.LeaderTerm = term
+	args.GlobalCommitProgress = leaderCommitProgress
 
-		targetChannel <- msg
+	for i := 0; i < len(targets); i++ {
+		go SendNotifyCommitProgress(
+			targets[i], args, new(NotifyCommitProgressReply))
 	}
-}
-
-// Synchronizes local commit progress with the global commit progress and
-// pushes all the commit log commands to the state machine connected to by the
-// applyCh. It will return the updated local commit progress and state machine
-// progress.
-func SyncWithGlobalCommitProgress(
-	globalCommitProgress int,
-	currentCommitProgress int,
-	stateMachineProgress int,
-	logs []LogEntry,
-	applyCh chan ApplyMsg,
-) (int, int) {
-	if globalCommitProgress <= currentCommitProgress {
-		// Nothing to commit.
-		return currentCommitProgress, stateMachineProgress
-	}
-
-	// Update commit progress and push logs to the state machine.
-	if globalCommitProgress <= len(logs) {
-		currentCommitProgress = globalCommitProgress
-	} else {
-		currentCommitProgress = len(logs)
-	}
-
-	if currentCommitProgress > stateMachineProgress {
-		go SendLogsToStateMachine(
-			logs,
-			stateMachineProgress, currentCommitProgress,
-			applyCh)
-
-		stateMachineProgress = currentCommitProgress
-	}
-
-	return currentCommitProgress, stateMachineProgress
 }
