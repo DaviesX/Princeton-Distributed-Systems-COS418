@@ -47,7 +47,7 @@ func (rf *Raft) RequestVote(
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if args.CandidateTerm <= rf.currentTerm ||
+	if args.CandidateTerm <= rf.highestVotedTerm ||
 		!ContainsAllCommitedByCandidate(
 			rf.logs, rf.commitProgress,
 			args.CandidateHighestLogTerm, args.CandidateLogProgress) {
@@ -55,7 +55,7 @@ func (rf *Raft) RequestVote(
 		return
 	}
 
-	rf.currentTerm = args.CandidateTerm
+	rf.highestVotedTerm = args.CandidateTerm
 
 	reply.VoteGranted = true
 }

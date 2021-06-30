@@ -73,7 +73,8 @@ func (rf *Raft) NotifyCommitProgress(
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if args.LeaderTerm < rf.currentTerm {
+	term, _ := rf.TermRoleHolder().CurrentTermRole()
+	if args.LeaderTerm < term {
 		// Reject an out-of-date leader.
 		reply.Success = false
 		return
@@ -82,8 +83,8 @@ func (rf *Raft) NotifyCommitProgress(
 	// The node might not participate in a past election hence not learned
 	// that the term has moved up. So we will update it here (perhaps coming
 	// from a heartbeat).
-	rf.currentTerm = args.LeaderTerm
-	rf.lastAppendRpcTimestamp++
+	rf.followerSchedule.ConfirmHeartbeat()
+	rf.TermRoleHolder().RequestTermUpgradeTo(args.LeaderTerm)
 
 	rf.commitProgress, rf.stateMachineProgress =
 		SyncWithGlobalCommitProgress(

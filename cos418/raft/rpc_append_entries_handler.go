@@ -49,19 +49,22 @@ func (rf *Raft) AppendEntries(
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if args.LeaderTerm < rf.currentTerm {
+	term, _ := rf.TermRoleHolder().CurrentTermRole()
+	if args.LeaderTerm < term {
 		// Reject an out-of-date leader.
 		reply.Concatenable = false
-		reply.TermHold = rf.currentTerm
+		reply.TermHold = term
 		return
 	}
+
+	rf.termRoleHolder.RequestTermUpgradeTo(args.LeaderTerm)
 
 	if len(rf.logs) > 0 && args.StartIndex > 0 {
 		if args.StartIndex > len(rf.logs) ||
 			rf.logs[args.StartIndex-1].Term != args.PrevLogTerm {
 			// Fails to reconcile with the alien log source.
 			reply.Concatenable = false
-			reply.TermHold = rf.currentTerm
+			reply.TermHold = term
 			return
 		}
 	}
@@ -71,7 +74,7 @@ func (rf *Raft) AppendEntries(
 	rf.persist()
 
 	reply.Concatenable = true
-	reply.TermHold = rf.currentTerm
+	reply.TermHold = term
 }
 
 func SendAppendEntries(

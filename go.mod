@@ -11,6 +11,7 @@ require (
 	github.com/ramya-rao-a/go-outline v0.0.0-20200117021646-2a048b4510eb // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/uudashr/gopkgs/v2 v2.1.2 // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/tools/gopls v0.6.11 // indirect
 	honnef.co/go/tools v0.2.0 // indirect
 )

@@ -125,7 +125,10 @@ func CommitProgress(leaderKnowledge LeaderKnowledge) int {
 	}
 }
 
-func SyncCommitProgressAsync(
+// Notifies leader's commit progress amount the peers, so peers can push
+// commited logs to their state mahcine. However, it doesn't guarantee
+// synchronization.
+func NotifyCommitProgressAsync(
 	from int,
 	leaderCommitProgress int,
 	targets []*labrpc.ClientEnd,

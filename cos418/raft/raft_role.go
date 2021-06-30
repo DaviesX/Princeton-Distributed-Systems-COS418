@@ -3,40 +3,24 @@ package raft
 import (
 	"cos418/cos418/labrpc"
 	"fmt"
-	"math/rand"
 	"sync"
-	"time"
 )
 
-type RaftRole int
-
-const (
-	RaftFollower  RaftRole = 1
-	RaftCandidate RaftRole = 2
-	RaftLeader    RaftRole = 3
-)
-
-const (
-	HeartbeatInterval         = 50
-	HeartbeatTimeoutMinMicros = 3 * HeartbeatInterval
-	HeartbeatTimeoutMaxMicros = 6 * HeartbeatInterval
-	ElectionTimeout           = HeartbeatTimeoutMaxMicros
-)
+const NilTerm = -1
 
 func CollectVoteFrom(
 	target *labrpc.ClientEnd,
 	candidateId int,
 	term int,
-	logProgress int,
-	highestLogTerm int,
+	logLiveness LogLiveness,
 	voteCount *int,
 	voteCountMutex *sync.Mutex,
 ) {
 	var args RequestVoteArgs
 	args.CandidateId = candidateId
 	args.CandidateTerm = term
-	args.CandidateLogProgress = logProgress
-	args.CandidateHighestLogTerm = highestLogTerm
+	args.CandidateLogProgress = logLiveness.LogProgress
+	args.CandidateHighestLogTerm = logLiveness.HighestLogTerm
 
 	var reply RequestVoteReply
 
@@ -53,8 +37,7 @@ func CollectVoteFrom(
 func StartElectionAsync(
 	candidateId int,
 	term int,
-	logProgress int,
-	highestLogTerm int,
+	logLiveness LogLiveness,
 	peers []*labrpc.ClientEnd,
 ) *int {
 	voteCount := new(int)
@@ -63,14 +46,86 @@ func StartElectionAsync(
 	for i := 0; i < len(peers); i++ {
 		go CollectVoteFrom(
 			peers[i], candidateId,
-			term, logProgress, highestLogTerm,
+			term, logLiveness,
 			voteCount, voteCountMutex)
 	}
 
 	return voteCount
 }
 
-// It puts the node into the correct raft role by detecting the transition
+func DoFollowerCycle(
+	raft RaftInternalInterface,
+) {
+	raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower)
+	for raft.FollowerSchedule().WaitForHeartbeat() {
+		raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower)
+	}
+
+	// Haven't received any message from the leader for some time.
+	currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
+	raft.TermRoleHolder().ApplyTermRoleUpgrade(currentTerm, RaftCandidate)
+
+	fmt.Printf("At node=%d|term=%d: no heartbeat from the leader, becoming candidate.\n",
+		raft.WhoIAm(), currentTerm)
+}
+
+func DoCandidateCycle(
+	raft RaftInternalInterface,
+) {
+	var currentTerm int
+
+	for i := 0; i < 1; i++ {
+		currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
+		raft.TermRoleHolder().ApplyTermRoleUpgrade(
+			currentTerm+1, RaftCandidate)
+
+		voteCount := StartElectionAsync(
+			raft.WhoIAm(),
+			currentTerm+1,
+			raft.LogLiveness(),
+			raft.Peers())
+		raft.CandidateSchedule().WaitForElectionResult()
+
+		if *voteCount > len(raft.Peers())/2 {
+			// Just won the election.
+			raft.TermRoleHolder().ApplyTermRoleUpgrade(
+				currentTerm+1, RaftLeader)
+
+			fmt.Printf(
+				"At node=%d|term=%d: collected enough vote=%d, becoming leader.\n",
+				raft.WhoIAm(), currentTerm+1, *voteCount)
+			return
+		}
+
+		// Re-election.
+		fmt.Printf(
+			"At node=%d|term=%d: split votes=%d, conducting re-election the %dth times.\n",
+			raft.WhoIAm(), currentTerm+1, *voteCount, i+1)
+	}
+
+	raft.TermRoleHolder().ApplyTermRoleUpgrade(currentTerm+1, RaftFollower)
+
+	fmt.Printf(
+		"At node=%d|term=%d: failing to win multiple elections, becoming follower.\n",
+		raft.WhoIAm(), currentTerm+1)
+}
+
+func DoLeaderCycle(
+	raft RaftInternalInterface,
+) {
+	for !raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower) {
+		raft.PublishAndCommit()
+		raft.LeaderSchedule().TakeABreak()
+	}
+
+	// Detects possible new leaders.
+	currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
+	fmt.Printf(
+		"At node=%d|term=%d: found higher termed heartbeat, becoming follower.\n",
+		raft.WhoIAm(), currentTerm)
+}
+
+// It helps put the node into the correct raft role by detecting the transition
 // condition. Or more precisely, it implements the state machine:
 //                                             == Re-elction ==
 //                                            ||              ||
@@ -80,80 +135,18 @@ func StartElectionAsync(
 //                  |^|                                                  ||
 //                   ==================== higher term ====================
 //
-func MaintainRaftRole(rf *Raft) {
-	const NilTerm = -1
+// When it transitions, it notifies the node via the updateRoleFn.
+func DoRaftRole(raft RaftInternalInterface) {
+	for !raft.ShouldShutdown() {
+		_, role := raft.TermRoleHolder().CurrentTermRole()
 
-	termToKeep := NilTerm
-
-	for !rf.done {
-		switch rf.role {
+		switch role {
 		case RaftFollower:
-			lastAppendRpcTimestamp := rf.lastAppendRpcTimestamp
-
-			timeout := time.Duration(HeartbeatTimeoutMinMicros +
-				rand.Intn(HeartbeatTimeoutMaxMicros-HeartbeatTimeoutMinMicros))
-			time.Sleep(timeout * time.Millisecond)
-
-			if rf.lastAppendRpcTimestamp == lastAppendRpcTimestamp {
-				// Haven't received any message from the leader for some time.
-				fmt.Printf("At node=%d|term=%d: no heartbeat from the leader, becoming candidate.\n",
-					rf.me, rf.currentTerm)
-
-				rf.role = RaftCandidate
-				termToKeep = rf.currentTerm + 1
-			}
+			DoFollowerCycle(raft)
 		case RaftCandidate:
-			logProgress := len(rf.logs)
-			var highestLogTerm int
-			if logProgress == 0 {
-				highestLogTerm = 0
-			} else {
-				highestLogTerm = rf.logs[logProgress-1].Term
-			}
-
-			voteCount := StartElectionAsync(
-				rf.me, termToKeep, logProgress, highestLogTerm, rf.peers)
-
-			time.Sleep(ElectionTimeout * time.Millisecond)
-
-			newTerm, _ := rf.GetState()
-
-			if *voteCount > len(rf.peers)/2 {
-				fmt.Printf(
-					"At node=%d|term=%d: collected enough vote=%d, becoming leader.\n",
-					rf.me, termToKeep, *voteCount)
-
-				rf.role = RaftLeader
-			} else if newTerm > termToKeep {
-				// Found possible election cycle or even a new leader.
-				fmt.Printf(
-					"At node=%d|term=%d: found higher termed heartbeat, becoming follower.\n",
-					rf.me, termToKeep)
-
-				rf.role = RaftFollower
-				termToKeep = NilTerm
-			} else {
-				// Re-election.
-				fmt.Printf(
-					"At node=%d|term=%d: split votes=%d, conducting re-election.\n",
-					rf.me, termToKeep, *voteCount)
-
-				termToKeep++
-			}
+			DoCandidateCycle(raft)
 		case RaftLeader:
-			SyncCommitProgressAsync(rf.me, rf.commitProgress, rf.peers, termToKeep)
-			time.Sleep(HeartbeatInterval * time.Millisecond)
-
-			newTerm, _ := rf.GetState()
-			if newTerm > termToKeep {
-				// Found possible candidates or even a new leader.
-				fmt.Printf(
-					"At node=%d|term=%d: found higher termed heartbeat, becoming follower.\n",
-					rf.me, rf.currentTerm)
-
-				rf.role = RaftFollower
-				termToKeep = NilTerm
-			}
+			DoLeaderCycle(raft)
 		}
 	}
 }

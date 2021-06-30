@@ -57,16 +57,20 @@ type Raft struct {
 	me        int // index into peers[]
 	applyCh   chan ApplyMsg
 
+	// Raft role schedules.
+	followerSchedule  *FollowerSchedule
+	candidateSchedule *CandidateSchedule
+	leaderSchedule    *LeaderSchedule
+
 	// Persistent state.
-	currentTerm int
-	logs        []LogEntry
+	termRoleHolder   *TermRoleHolder
+	highestVotedTerm int
+	logs             []LogEntry
 
 	// Volatile state.
-	role                   RaftRole
-	lastAppendRpcTimestamp int
-	commitProgress         int
-	stateMachineProgress   int
-	leaderKnowledge        *LeaderKnowledge
+	commitProgress       int
+	stateMachineProgress int
+	leaderKnowledge      *LeaderKnowledge
 
 	done bool
 }
@@ -74,7 +78,8 @@ type Raft struct {
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-	return rf.currentTerm, rf.role == RaftLeader
+	term, role := rf.termRoleHolder.CurrentTermRole()
+	return term, role == RaftLeader
 }
 
 // Saves Raft's persistent state to stable storage,
@@ -84,7 +89,8 @@ func (rf *Raft) persist() {
 	outputBuffer := new(bytes.Buffer)
 	encoder := gob.NewEncoder(outputBuffer)
 
-	encoder.Encode(rf.currentTerm)
+	rf.termRoleHolder.Serialize(encoder)
+	encoder.Encode(rf.highestVotedTerm)
 	encoder.Encode(rf.logs)
 
 	data := outputBuffer.Bytes()
@@ -96,7 +102,8 @@ func (rf *Raft) readPersist(data []byte) {
 	inputBuffer := bytes.NewBuffer(data)
 	decoder := gob.NewDecoder(inputBuffer)
 
-	decoder.Decode(&rf.currentTerm)
+	rf.termRoleHolder.Deserialize(decoder)
+	decoder.Decode(&rf.highestVotedTerm)
 	decoder.Decode(&rf.logs)
 }
 
@@ -112,15 +119,17 @@ func (rf *Raft) readPersist(data []byte) {
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	switch rf.role {
-	case RaftLeader:
-		rf.mu.Lock()
-		defer rf.mu.Unlock()
+	currentTerm, role := rf.TermRoleHolder().CurrentTermRole()
 
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	switch role {
+	case RaftLeader:
 		// Creates the log entry and updates the log buffer.
 		var newEntry LogEntry
 		newEntry.Command = command
-		newEntry.Term = rf.currentTerm
+		newEntry.Term = currentTerm
 
 		rf.logs = append(rf.logs, newEntry)
 		rf.persist()
@@ -129,24 +138,11 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 		// Starts agreement and publishes logs to the followers for
 		// replication.
-		newLeaderKnowledge, err := PublishLogs(
-			rf.me, rf.currentTerm,
-			rf.logs,
-			rf.peers, rf.leaderKnowledge)
-		if err != nil {
-			fmt.Printf(
-				"At node=%d|term=%d, encountered error=%s\n",
-				rf.me, rf.currentTerm, err.Error())
-		}
+		rf.leaderSchedule.Preempt()
 
-		newCommitProgress := CommitProgress(*newLeaderKnowledge)
-
-		SyncCommitProgressAsync(
-			rf.me, newCommitProgress, rf.peers, rf.currentTerm)
-
-		return len(rf.logs), rf.currentTerm, true
+		return len(rf.logs), currentTerm, true
 	default:
-		return -1, rf.currentTerm, false
+		return -1, currentTerm, false
 	}
 }
 
@@ -156,8 +152,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // turn off debug output from this instance.
 func (rf *Raft) Kill() {
 	fmt.Printf("At node=%d, stopping the raft role maintainer...\n", rf.me)
-
-	// TODO: Sychronizes with the raft role maintainer.
 	rf.done = true
 }
 
@@ -172,17 +166,20 @@ func (rf *Raft) Kill() {
 // for any long-running work.
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
-	rf := &Raft{}
+	rf := new(Raft)
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
 	rf.applyCh = applyCh
 
-	rf.currentTerm = 0
+	rf.followerSchedule = NewFollowerSchedule()
+	rf.candidateSchedule = NewCandidateSchedule()
+	rf.leaderSchedule = NewLeaderSchedule()
+
+	rf.termRoleHolder = NewTermRoleHolder()
+	rf.highestVotedTerm = 0
 	rf.logs = make([]LogEntry, 0)
 
-	rf.role = RaftFollower
-	rf.lastAppendRpcTimestamp = 0
 	rf.commitProgress = 0
 	rf.stateMachineProgress = 0
 	rf.leaderKnowledge = NewLeaderKnowledge(len(peers))
@@ -193,7 +190,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 
 	fmt.Printf("At node=%d, starting the raft role maintainer...\n", rf.me)
-	go MaintainRaftRole(rf)
+	go DoRaftRole(rf)
 
 	return rf
 }
