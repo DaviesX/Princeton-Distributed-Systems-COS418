@@ -1,6 +1,9 @@
 package raft
 
-import "sync"
+import (
+	"encoding/gob"
+	"sync"
+)
 
 type TermUpgradeRequest struct {
 	newTerm int
@@ -100,4 +103,20 @@ func (th *TermRoleHolder) ApplyTermRoleUpgrade(
 	th.term = newTerm
 	th.role = roleIfUpgradable
 	return true
+}
+
+func (th *TermRoleHolder) Serialize(encoder *gob.Encoder) {
+	th.lock.Lock()
+	defer th.lock.Unlock()
+
+	encoder.Encode(th.term)
+	encoder.Encode(th.role)
+}
+
+func (th *TermRoleHolder) Deserialize(decoder *gob.Decoder) {
+	th.lock.Lock()
+	defer th.lock.Unlock()
+
+	decoder.Decode(&th.term)
+	decoder.Decode(&th.role)
 }
