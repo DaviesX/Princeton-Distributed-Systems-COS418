@@ -56,7 +56,6 @@ func StartElectionAsync(
 func DoFollowerCycle(
 	raft RaftInternalInterface,
 ) {
-	raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower)
 	for raft.FollowerSchedule().WaitForHeartbeat() {
 		raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower)
 	}
@@ -72,16 +71,13 @@ func DoFollowerCycle(
 func DoCandidateCycle(
 	raft RaftInternalInterface,
 ) {
-	var currentTerm int
+	currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
+	termToEstablish := currentTerm + 1
 
-	for i := 0; i < 1; i++ {
-		currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
-		raft.TermRoleHolder().ApplyTermRoleUpgrade(
-			currentTerm+1, RaftCandidate)
-
+	for {
 		voteCount := StartElectionAsync(
 			raft.WhoIAm(),
-			currentTerm+1,
+			termToEstablish,
 			raft.LogLiveness(),
 			raft.Peers())
 		raft.CandidateSchedule().WaitForElectionResult()
@@ -89,25 +85,32 @@ func DoCandidateCycle(
 		if *voteCount > len(raft.Peers())/2 {
 			// Just won the election.
 			raft.TermRoleHolder().ApplyTermRoleUpgrade(
-				currentTerm+1, RaftLeader)
+				termToEstablish, RaftLeader)
 
 			fmt.Printf(
 				"At node=%d|term=%d: collected enough vote=%d, becoming leader.\n",
-				raft.WhoIAm(), currentTerm+1, *voteCount)
+				raft.WhoIAm(), termToEstablish, *voteCount)
+			return
+		}
+
+		fmt.Printf(
+			"At node=%d|term=%d: split votes=%d\n", raft.WhoIAm(), currentTerm, *voteCount)
+
+		if raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower) {
+			// Encountered higher termed heartbeats. Should step down.
+			fmt.Printf(
+				"At node=%d|term=%d: encountered higher termed heartbeats, becoming follower.\n",
+				raft.WhoIAm(), currentTerm)
 			return
 		}
 
 		// Re-election.
+		termToEstablish++
+
 		fmt.Printf(
-			"At node=%d|term=%d: split votes=%d, conducting re-election the %dth times.\n",
-			raft.WhoIAm(), currentTerm+1, *voteCount, i+1)
+			"At node=%d|term=%d: conducting re-election the %dth times.\n",
+			raft.WhoIAm(), currentTerm, termToEstablish-currentTerm-1)
 	}
-
-	raft.TermRoleHolder().ApplyTermRoleUpgrade(currentTerm+1, RaftFollower)
-
-	fmt.Printf(
-		"At node=%d|term=%d: failing to win multiple elections, becoming follower.\n",
-		raft.WhoIAm(), currentTerm+1)
 }
 
 func DoLeaderCycle(
