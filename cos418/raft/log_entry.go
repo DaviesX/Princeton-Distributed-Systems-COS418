@@ -31,3 +31,51 @@ func DeserializeLogEntries(serializedLogEntries []byte) []LogEntry {
 
 	return logs
 }
+
+// Overwrites and appends the local logs with foreign logs starting from
+// startIndex. Note that startIndex can set at the end of the local logs but no
+// more further. After the local log content is modified, it optionally calls
+// the persistFn to persist the updated local logs.
+func OverwriteWithForeignLogs(
+	foreignLogEntries []LogEntry,
+	localLogEntries *[]LogEntry,
+	startIndex int,
+	persistFn func(logs []LogEntry),
+) {
+	if startIndex > len(*localLogEntries) {
+		panic("startIndex is after the end of the local logs.")
+	}
+
+	for i := 0; i < len(foreignLogEntries); i++ {
+		targetIndex := startIndex + i
+
+		if targetIndex >= len(*localLogEntries) {
+			*localLogEntries = append(*localLogEntries, foreignLogEntries[i])
+		} else {
+			(*localLogEntries)[targetIndex] = foreignLogEntries[i]
+		}
+	}
+
+	if persistFn != nil {
+		persistFn(*localLogEntries)
+	}
+}
+
+// Appends a new log to the local log source and optionally calls the persistFn
+// to persist the updated logs.
+func AppendLog(
+	command interface{},
+	currentTerm int,
+	logs *[]LogEntry,
+	persistFn func(logs []LogEntry),
+) {
+	var newEntry LogEntry
+	newEntry.Command = command
+	newEntry.Term = currentTerm
+
+	*logs = append(*logs, newEntry)
+
+	if persistFn != nil {
+		persistFn(*logs)
+	}
+}

@@ -28,26 +28,6 @@ func Concatenable(
 	return precedingLogTerm == localLogs[overrideFrom-1].Term
 }
 
-func ReplicateForeignLogs(
-	foreignLogData []byte,
-	startIndex int,
-	localLogEntries []LogEntry,
-) []LogEntry {
-	foreignLogEntries := DeserializeLogEntries(foreignLogData)
-
-	for i := 0; i < len(foreignLogEntries); i++ {
-		targetIndex := startIndex + i
-
-		if targetIndex >= len(localLogEntries) {
-			localLogEntries = append(localLogEntries, foreignLogEntries[i])
-		} else {
-			localLogEntries[targetIndex] = foreignLogEntries[i]
-		}
-	}
-
-	return localLogEntries
-}
-
 type AppendEntriesArgs struct {
 	LeaderTerm           int
 	LeaderId             int
@@ -95,9 +75,14 @@ func (rf *Raft) AppendEntries(
 		return
 	}
 
-	rf.logs = ReplicateForeignLogs(
-		args.SerializedLogEntries, args.StartIndex, rf.logs)
-	rf.persist()
+	foreignLogs := DeserializeLogEntries(args.SerializedLogEntries)
+	OverwriteWithForeignLogs(
+		foreignLogs,
+		&rf.logs,
+		args.StartIndex,
+		func(updatedLogs []LogEntry) {
+			rf.persist()
+		})
 
 	reply.Concatenable = true
 	reply.TermHold = term

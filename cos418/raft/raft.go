@@ -119,25 +119,22 @@ func (rf *Raft) readPersist(data []byte) {
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	currentTerm, role := rf.TermRoleHolder().CurrentTermRole()
-
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	currentTerm, role := rf.TermRoleHolder().CurrentTermRole()
+
 	switch role {
 	case RaftLeader:
-		// Creates the log entry and updates the log buffer.
-		var newEntry LogEntry
-		newEntry.Command = command
-		newEntry.Term = currentTerm
-
-		rf.logs = append(rf.logs, newEntry)
-		rf.persist()
-
+		AppendLog(
+			command, currentTerm,
+			&rf.logs,
+			func(updatedLogs []LogEntry) {
+				rf.persist()
+			})
 		rf.leaderKnowledge.peerLogProgresses[rf.me] = len(rf.logs)
 
-		// Starts agreement and publishes logs to the followers for
-		// replication.
+		// Asks the followers to replicate.
 		rf.leaderSchedule.Preempt()
 
 		return len(rf.logs), currentTerm, true
