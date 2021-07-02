@@ -113,16 +113,13 @@ func CommitProgress(leaderKnowledge LeaderKnowledge) int {
 
 	progresses := make([]int, numPeers)
 	copy(progresses, leaderKnowledge.peerLogProgresses)
+
 	sort.Slice(
 		progresses,
 		func(i int, j int) bool {
 			return progresses[i] > progresses[j]
 		})
-	if len(leaderKnowledge.peerLogProgresses)%2 == 0 {
-		return progresses[numPeers/2]
-	} else {
-		return progresses[numPeers/2+1]
-	}
+	return progresses[numPeers/2]
 }
 
 // Notifies leader's commit progress amount the peers, so peers can push
