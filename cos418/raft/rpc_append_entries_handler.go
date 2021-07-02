@@ -5,6 +5,29 @@ import (
 	"time"
 )
 
+func Concatenable(
+	overrideFrom int,
+	precedingLogTerm int,
+	localLogs []LogEntry,
+	localCommitIndex int,
+) bool {
+	if overrideFrom < localCommitIndex {
+		panic("Attempting to override committed logs!")
+	}
+
+	if overrideFrom > len(localLogs) {
+		// Replicating too far in the future, there are missing entries.
+		return false
+	}
+
+	if overrideFrom == 0 {
+		// Always possible to override the entire uncommitted log history.
+		return true
+	}
+
+	return precedingLogTerm == localLogs[overrideFrom-1].Term
+}
+
 func ReplicateForeignLogs(
 	foreignLogData []byte,
 	startIndex int,
@@ -14,6 +37,7 @@ func ReplicateForeignLogs(
 
 	for i := 0; i < len(foreignLogEntries); i++ {
 		targetIndex := startIndex + i
+
 		if targetIndex >= len(localLogEntries) {
 			localLogEntries = append(localLogEntries, foreignLogEntries[i])
 		} else {
@@ -60,14 +84,15 @@ func (rf *Raft) AppendEntries(
 
 	rf.termRoleHolder.RequestTermUpgradeTo(args.LeaderTerm)
 
-	if len(rf.logs) > 0 && args.StartIndex > 0 {
-		if args.StartIndex > len(rf.logs) ||
-			rf.logs[args.StartIndex-1].Term != args.PrevLogTerm {
-			// Fails to reconcile with the alien log source.
-			reply.Concatenable = false
-			reply.TermHold = term
-			return
-		}
+	if !Concatenable(
+		args.StartIndex,
+		args.PrevLogTerm,
+		rf.logs,
+		rf.commitProgress) {
+		// Fails to reconcile with the alien log source.
+		reply.Concatenable = false
+		reply.TermHold = term
+		return
 	}
 
 	rf.logs = ReplicateForeignLogs(
