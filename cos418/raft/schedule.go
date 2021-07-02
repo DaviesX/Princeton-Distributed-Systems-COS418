@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	HeartbeatInterval         = 50
+	HeartbeatInterval         = 100
 	HeartbeatTimeoutMinMicros = 2 * HeartbeatInterval
 	HeartbeatTimeoutMaxMicros = 4 * HeartbeatInterval
 	ElectionTimeout           = HeartbeatTimeoutMaxMicros

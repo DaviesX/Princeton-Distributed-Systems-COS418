@@ -2,6 +2,7 @@ package raft
 
 import (
 	"cos418/cos418/labrpc"
+	"time"
 )
 
 func ReplicateForeignLogs(
@@ -77,11 +78,31 @@ func (rf *Raft) AppendEntries(
 	reply.TermHold = term
 }
 
+func SendAppendEntriesAsync(
+	target *labrpc.ClientEnd,
+	args AppendEntriesArgs,
+	reply *AppendEntriesReply,
+	ok *bool,
+	ready *bool,
+) {
+	*ok = target.Call("Raft.AppendEntries", args, reply)
+	*ready = true
+}
+
+// Unlike the above SendAppendEntriesAsync() function, this funciton is
+// synchronized but will time out after 50 ms.
 func SendAppendEntries(
 	target *labrpc.ClientEnd,
 	args AppendEntriesArgs,
 	reply *AppendEntriesReply,
 ) bool {
-	ok := target.Call("Raft.AppendEntries", args, reply)
+	ok := false
+	ready := false
+
+	go SendAppendEntriesAsync(target, args, reply, &ok, &ready)
+	for i := 0; i < 500 && !ready; i++ {
+		time.Sleep(100 * time.Microsecond)
+	}
+
 	return ok
 }
