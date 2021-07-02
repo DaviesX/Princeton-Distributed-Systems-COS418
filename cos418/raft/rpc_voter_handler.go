@@ -23,7 +23,7 @@ func ContainsAllCommitedByCandidate(
 	candidateHighestLogTerm int,
 	candidateLogProgress int,
 ) bool {
-	if len(logs) == 0 {
+	if commitProgress == 0 {
 		return true
 	}
 
