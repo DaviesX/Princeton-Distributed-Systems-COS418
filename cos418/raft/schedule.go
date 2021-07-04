@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	HeartbeatInterval         = 50
-	HeartbeatTimeoutMinMillis = 2 * HeartbeatInterval
-	HeartbeatTimeoutMaxMillis = 4 * HeartbeatInterval
-	ElectionTimeout           = HeartbeatTimeoutMaxMillis
+	HeartbeatInterval         = 200
+	HeartbeatTimeoutMinMillis = 5 * HeartbeatInterval
+	HeartbeatTimeoutMaxMillis = 10 * HeartbeatInterval
+	ElectionTimeout           = 4 * HeartbeatInterval
 )
 
 // Controls the raft role maintainer thread and provides time measurement of
