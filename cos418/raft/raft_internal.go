@@ -83,20 +83,20 @@ func (rf *Raft) PublishAndCommit() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	newLeaderKnowledge, err := PublishLogs(
+	newPeersLogProgress, err := PublishLogs(
 		rf.me,
 		currentTerm,
 		rf.logs,
 		rf.peers,
-		rf.leaderKnowledge)
+		rf.peersLogProgress)
 	if err != nil {
 		fmt.Printf(
 			"At node=%d|term=%d, encountered error=%s\n",
 			rf.me, currentTerm, err.Error())
 	}
-	*rf.leaderKnowledge = *newLeaderKnowledge
+	rf.peersLogProgress = newPeersLogProgress
 
-	newCommitProgress := CommitProgress(*newLeaderKnowledge)
+	newCommitProgress := CommitProgress(newPeersLogProgress)
 
 	NotifyCommitProgressAsync(
 		rf.me,

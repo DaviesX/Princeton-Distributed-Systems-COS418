@@ -40,6 +40,7 @@ func OverwriteWithForeignLogs(
 	foreignLogEntries []LogEntry,
 	localLogEntries *[]LogEntry,
 	startIndex int,
+	commitIndex int,
 	persistFn func(logs []LogEntry),
 ) {
 	if startIndex > len(*localLogEntries) {
@@ -49,11 +50,22 @@ func OverwriteWithForeignLogs(
 	for i := 0; i < len(foreignLogEntries); i++ {
 		targetIndex := startIndex + i
 
+		if targetIndex < commitIndex &&
+			(*localLogEntries)[targetIndex].Term != foreignLogEntries[i].Term {
+			panic("Attempting to override committed logs!")
+		}
+
 		if targetIndex >= len(*localLogEntries) {
 			*localLogEntries = append(*localLogEntries, foreignLogEntries[i])
-		} else {
-			(*localLogEntries)[targetIndex] = foreignLogEntries[i]
+			continue
 		}
+
+		if (*localLogEntries)[targetIndex].Term != foreignLogEntries[i].Term {
+			// Trim everything beyond targetIndex.
+			*localLogEntries = (*localLogEntries)[:targetIndex+1]
+		}
+
+		(*localLogEntries)[targetIndex] = foreignLogEntries[i]
 	}
 
 	if persistFn != nil {

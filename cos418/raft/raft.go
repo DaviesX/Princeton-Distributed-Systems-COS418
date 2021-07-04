@@ -37,16 +37,6 @@ type ApplyMsg struct {
 	Snapshot    []byte // ignore for lab2; only used in lab3
 }
 
-type LeaderKnowledge struct {
-	peerLogProgresses []int
-}
-
-func NewLeaderKnowledge(numPeers int) *LeaderKnowledge {
-	lk := new(LeaderKnowledge)
-	lk.peerLogProgresses = make([]int, numPeers)
-	return lk
-}
-
 //
 // A Go object implementing a single Raft peer.
 //
@@ -63,14 +53,13 @@ type Raft struct {
 	leaderSchedule    *LeaderSchedule
 
 	// Persistent state.
-	termRoleHolder   *TermRoleHolder
-	highestVotedTerm int
-	logs             []LogEntry
+	termRoleHolder *TermRoleHolder
+	logs           []LogEntry
 
 	// Volatile state.
 	commitProgress       int
 	stateMachineProgress int
-	leaderKnowledge      *LeaderKnowledge
+	peersLogProgress     []int
 
 	done bool
 }
@@ -90,7 +79,6 @@ func (rf *Raft) persist() {
 	encoder := gob.NewEncoder(outputBuffer)
 
 	rf.termRoleHolder.Serialize(encoder)
-	encoder.Encode(rf.highestVotedTerm)
 	encoder.Encode(rf.logs)
 
 	data := outputBuffer.Bytes()
@@ -103,7 +91,6 @@ func (rf *Raft) readPersist(data []byte) {
 	decoder := gob.NewDecoder(inputBuffer)
 
 	rf.termRoleHolder.Deserialize(decoder)
-	decoder.Decode(&rf.highestVotedTerm)
 	decoder.Decode(&rf.logs)
 }
 
@@ -132,7 +119,10 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 			func(updatedLogs []LogEntry) {
 				rf.persist()
 			})
-		rf.leaderKnowledge.peerLogProgresses[rf.me] = len(rf.logs)
+		rf.peersLogProgress[rf.me] = len(rf.logs)
+
+		fmt.Printf("** At=%d: added log=(command=%d, index=%d, term=%d)\n",
+			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
 
 		// Asks the followers to replicate.
 		rf.leaderSchedule.Preempt()
@@ -174,12 +164,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.leaderSchedule = NewLeaderSchedule()
 
 	rf.termRoleHolder = NewTermRoleHolder()
-	rf.highestVotedTerm = 0
 	rf.logs = make([]LogEntry, 0)
 
 	rf.commitProgress = 0
 	rf.stateMachineProgress = 0
-	rf.leaderKnowledge = NewLeaderKnowledge(len(peers))
+	rf.peersLogProgress = make([]int, len(peers))
 
 	rf.done = false
 

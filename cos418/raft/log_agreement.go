@@ -20,8 +20,7 @@ func SyncLogsWithPeer(
 	peer *labrpc.ClientEnd,
 	peerReplicationProgress int,
 ) (int, error) {
-	concatFrom := peerReplicationProgress
-	for ; concatFrom >= 0; concatFrom-- {
+	for concatFrom := peerReplicationProgress; concatFrom >= 0; concatFrom-- {
 		var arg AppendEntriesArgs
 		arg.LeaderId = publishFrom
 		arg.LeaderTerm = publisherTerm
@@ -72,18 +71,17 @@ func PublishLogs(
 	publisherTerm int,
 	allLogs []LogEntry,
 	peers []*labrpc.ClientEnd,
-	leaderKnowledge *LeaderKnowledge,
-) (*LeaderKnowledge, error) {
+	peersLogProgress []int,
+) ([]int, error) {
 	if len(allLogs) == 0 {
-		return leaderKnowledge, nil
+		return peersLogProgress, nil
 	}
 
-	newLeaderKnowledge := NewLeaderKnowledge(len(peers))
+	newPeersLogProgress := make([]int, len(peers))
 
 	for i, peer := range peers {
 		if i == publishFrom {
-			newLeaderKnowledge.peerLogProgresses[i] =
-				leaderKnowledge.peerLogProgresses[i]
+			newPeersLogProgress[i] = peersLogProgress[i]
 			continue
 		}
 
@@ -91,28 +89,27 @@ func PublishLogs(
 		newReplicationProgress, err := SyncLogsWithPeer(
 			publishFrom, publisherTerm,
 			allLogs,
-			peer, leaderKnowledge.peerLogProgresses[i])
+			peer, peersLogProgress[i])
 		if err != nil {
 			// Leader is outdated. Let other leaders conduct synchronization
 			// instead.
-			return leaderKnowledge, err
+			return peersLogProgress, err
 		}
 
-		newLeaderKnowledge.peerLogProgresses[i] =
-			newReplicationProgress
+		newPeersLogProgress[i] = newReplicationProgress
 	}
 
-	return newLeaderKnowledge, nil
+	return newPeersLogProgress, nil
 }
 
 // Decides what the commit progress is based on peers' replication progress.
 // The commit progress will be the smallest index that goes after all the log
 // entries that get replicated by the quorum.
-func CommitProgress(leaderKnowledge LeaderKnowledge) int {
-	numPeers := len(leaderKnowledge.peerLogProgresses)
+func CommitProgress(peersLogProgress []int) int {
+	numPeers := len(peersLogProgress)
 
 	progresses := make([]int, numPeers)
-	copy(progresses, leaderKnowledge.peerLogProgresses)
+	copy(progresses, peersLogProgress)
 
 	sort.Slice(
 		progresses,

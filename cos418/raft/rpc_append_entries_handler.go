@@ -11,10 +11,6 @@ func Concatenable(
 	localLogs []LogEntry,
 	localCommitIndex int,
 ) bool {
-	if overrideFrom < localCommitIndex {
-		panic("Attempting to override committed logs!")
-	}
-
 	if overrideFrom > len(localLogs) {
 		// Replicating too far in the future, there are missing entries.
 		return false
@@ -80,6 +76,7 @@ func (rf *Raft) AppendEntries(
 		foreignLogs,
 		&rf.logs,
 		args.StartIndex,
+		rf.commitProgress,
 		func(updatedLogs []LogEntry) {
 			rf.persist()
 		})

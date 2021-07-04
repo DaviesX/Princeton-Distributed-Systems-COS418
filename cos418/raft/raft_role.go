@@ -41,9 +41,14 @@ func StartElectionAsync(
 	peers []*labrpc.ClientEnd,
 ) *int {
 	voteCount := new(int)
+	*voteCount = 1 // Votes for itself.
 	voteCountMutex := new(sync.Mutex)
 
 	for i := 0; i < len(peers); i++ {
+		if i == candidateId {
+			continue
+		}
+
 		go CollectVoteFrom(
 			peers[i], candidateId,
 			term, logLiveness,
@@ -56,8 +61,10 @@ func StartElectionAsync(
 func DoFollowerCycle(
 	raft RaftInternalInterface,
 ) {
-	for raft.FollowerSchedule().WaitForHeartbeat() {
-		raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower)
+	for raft.FollowerSchedule().WaitForHeartbeat(
+		func() {
+			raft.TermRoleHolder().ApplyPendingTermRoleUpgrade(RaftFollower)
+		}) {
 	}
 
 	// Haven't received any message from the leader for some time.
@@ -71,10 +78,12 @@ func DoFollowerCycle(
 func DoCandidateCycle(
 	raft RaftInternalInterface,
 ) {
-	currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
-	termToEstablish := currentTerm + 1
+	for i := 0; true; i++ {
+		currentTerm, _ := raft.TermRoleHolder().CurrentTermRole()
+		termToEstablish := currentTerm + 1
+		raft.TermRoleHolder().ApplyTermRoleUpgrade(
+			termToEstablish, RaftCandidate)
 
-	for {
 		voteCount := StartElectionAsync(
 			raft.WhoIAm(),
 			termToEstablish,
@@ -109,7 +118,7 @@ func DoCandidateCycle(
 
 		fmt.Printf(
 			"At node=%d|term=%d: conducting re-election the %dth times.\n",
-			raft.WhoIAm(), currentTerm, termToEstablish-currentTerm-1)
+			raft.WhoIAm(), currentTerm, i)
 	}
 }
 

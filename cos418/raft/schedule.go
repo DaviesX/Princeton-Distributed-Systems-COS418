@@ -1,18 +1,15 @@
 package raft
 
 import (
-	"context"
 	"math/rand"
 	"time"
-
-	"golang.org/x/sync/semaphore"
 )
 
 const (
-	HeartbeatInterval         = 100
-	HeartbeatTimeoutMinMicros = 2 * HeartbeatInterval
-	HeartbeatTimeoutMaxMicros = 4 * HeartbeatInterval
-	ElectionTimeout           = HeartbeatTimeoutMaxMicros
+	HeartbeatInterval         = 50
+	HeartbeatTimeoutMinMillis = 2 * HeartbeatInterval
+	HeartbeatTimeoutMaxMillis = 4 * HeartbeatInterval
+	ElectionTimeout           = HeartbeatTimeoutMaxMillis
 )
 
 // Controls the raft role maintainer thread and provides time measurement of
@@ -32,13 +29,21 @@ func (fs *FollowerSchedule) ConfirmHeartbeat() {
 }
 
 // Waits for a heartbeat to arrive. If there is at least one heartbeat arrives
-// before the timeout, it returns true. Otherwise, it returns false.
-func (fs *FollowerSchedule) WaitForHeartbeat() bool {
+// before the timeout, it returns true. Otherwise, it returns false. It also
+// let the caller to perform a quick repeated task while waiting.
+func (fs *FollowerSchedule) WaitForHeartbeat(preemptWithTaskFn func()) bool {
 	clockMark := fs.clock
 
-	timeout := time.Duration(HeartbeatTimeoutMinMicros +
-		rand.Intn(HeartbeatTimeoutMaxMicros-HeartbeatTimeoutMinMicros))
-	time.Sleep(timeout * time.Millisecond)
+	timeoutMillis := HeartbeatTimeoutMinMillis +
+		rand.Intn(HeartbeatTimeoutMaxMillis-HeartbeatTimeoutMinMillis)
+
+	for i := 0; i < timeoutMillis; i++ {
+		if preemptWithTaskFn != nil {
+			preemptWithTaskFn()
+		}
+
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	return fs.clock > clockMark
 }
@@ -60,18 +65,18 @@ func (cs *CandidateSchedule) WaitForElectionResult() {
 // Controls the raft role maintainer thread to balance between latency and
 // efficiency.
 type LeaderSchedule struct {
-	preemption *semaphore.Weighted
+	preemption chan bool
 }
 
 func NewLeaderSchedule() *LeaderSchedule {
 	ls := new(LeaderSchedule)
-	ls.preemption = semaphore.NewWeighted(1000)
+	ls.preemption = make(chan bool, 256)
 	return ls
 }
 
 // Wakes up the raft role maintainer thread to make it do leader work.
 func (ls *LeaderSchedule) Preempt() {
-	ls.preemption.Release(1)
+	ls.preemption <- true
 }
 
 func WakeUpLeaderSchedule(ls *LeaderSchedule, canceled *bool) {
@@ -88,7 +93,7 @@ func (ls *LeaderSchedule) TakeABreak() {
 	canceled := false
 	go WakeUpLeaderSchedule(ls, &canceled)
 
-	ls.preemption.Acquire(context.Background(), 1)
+	<-ls.preemption
 
 	canceled = true
 }

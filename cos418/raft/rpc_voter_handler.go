@@ -18,11 +18,16 @@ type RequestVoteReply struct {
 // Given the lastest log progress and highest log term other log source have,
 // deduce if it covers all the committed log entries.
 func ContainsAllCommitedByCandidate(
+	me int,
+	candidate int,
 	logs []LogEntry,
 	commitProgress int,
 	candidateHighestLogTerm int,
 	candidateLogProgress int,
 ) bool {
+	//fmt.Printf("$$ candidate=%d|voter=%d: commitProgress=%d candidateLogTerm=%d candidateLogProgress=%d\n",
+	//	candidate, me, commitProgress, candidateHighestLogTerm, candidateLogProgress)
+
 	if commitProgress == 0 {
 		return true
 	}
@@ -47,15 +52,24 @@ func (rf *Raft) RequestVote(
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if args.CandidateTerm <= rf.highestVotedTerm ||
-		!ContainsAllCommitedByCandidate(
-			rf.logs, rf.commitProgress,
-			args.CandidateHighestLogTerm, args.CandidateLogProgress) {
+	currentTerm, _ := rf.termRoleHolder.CurrentTermRole()
+	if args.CandidateTerm <= currentTerm {
 		reply.VoteGranted = false
 		return
 	}
 
-	rf.highestVotedTerm = args.CandidateTerm
+	rf.termRoleHolder.RequestTermUpgradeTo(args.CandidateTerm)
+
+	if !ContainsAllCommitedByCandidate(
+		rf.me,
+		args.CandidateId,
+		rf.logs,
+		rf.commitProgress,
+		args.CandidateHighestLogTerm,
+		args.CandidateLogProgress) {
+		reply.VoteGranted = false
+		return
+	}
 
 	reply.VoteGranted = true
 }

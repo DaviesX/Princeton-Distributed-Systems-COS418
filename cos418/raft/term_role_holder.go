@@ -70,20 +70,19 @@ func (th *TermRoleHolder) ApplyPendingTermRoleUpgrade(
 
 	upgradable := false
 
-	if len(th.requests) == 0 {
-		return upgradable
+	for len(th.requests) > 0 {
+		// Apply all requests at once.
+		newRequest := th.requests[0]
+		th.requests = th.requests[1:]
+
+		if newRequest.newTerm > th.term {
+			th.term = newRequest.newTerm
+			th.role = roleIfUpgradable
+			upgradable = true
+		}
+
+		newRequest.signal <- true
 	}
-
-	newRequest := th.requests[0]
-	th.requests = th.requests[1:]
-
-	if newRequest.newTerm > th.term {
-		th.term = newRequest.newTerm
-		th.role = roleIfUpgradable
-		upgradable = true
-	}
-
-	newRequest.signal <- true
 
 	return upgradable
 }
