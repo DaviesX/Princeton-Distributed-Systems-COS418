@@ -70,7 +70,7 @@ type LeaderSchedule struct {
 
 func NewLeaderSchedule() *LeaderSchedule {
 	ls := new(LeaderSchedule)
-	ls.preemption = make(chan bool, 256)
+	ls.preemption = make(chan bool, 1024)
 	return ls
 }
 
@@ -79,21 +79,18 @@ func (ls *LeaderSchedule) Preempt() {
 	ls.preemption <- true
 }
 
-func WakeUpLeaderSchedule(ls *LeaderSchedule, canceled *bool) {
+func WakeUpLeaderSchedule(ls *LeaderSchedule) {
 	time.Sleep(HeartbeatInterval * time.Millisecond)
-	if !*canceled {
-		ls.Preempt()
-	}
+	ls.Preempt()
 }
 
 // Puts the raft role maintainer thread into sleep for a while, to save
 // computation, unless a preemption occurs to force the thread to do leader
-// work.
+// work. This function isn't thread safe.
 func (ls *LeaderSchedule) TakeABreak() {
-	canceled := false
-	go WakeUpLeaderSchedule(ls, &canceled)
+	if len(ls.preemption) == 0 {
+		go WakeUpLeaderSchedule(ls)
+	}
 
 	<-ls.preemption
-
-	canceled = true
 }
