@@ -105,14 +105,15 @@ func (rf *Raft) readPersist(data []byte) {
 // if it's ever committed. the second return value is the current
 // term. the third return value is true if this server believes it is
 // the leader.
-func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
+func (rf *Raft) Start(
+	command interface{},
+) (int, int, bool) {
 	currentTerm, role := rf.TermRoleHolder().CurrentTermRole()
 
 	switch role {
 	case RaftLeader:
+		rf.mu.Lock()
+
 		AppendLog(
 			command, currentTerm,
 			&rf.logs,
@@ -123,6 +124,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 		fmt.Printf("** At=%d: added log=(command=%d, index=%d, term=%d)\n",
 			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
+
+		rf.mu.Unlock()
 
 		// Asks the followers to replicate.
 		rf.leaderSchedule.Preempt()
