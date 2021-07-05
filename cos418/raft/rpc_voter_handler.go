@@ -16,27 +16,25 @@ type RequestVoteReply struct {
 }
 
 // Given the lastest log progress and highest log term other log source have,
-// deduce if it covers all the committed log entries.
+// deduce if it covers all the committed log entries. Note that, since there is
+// no way to know the global commit progress at a given moment, it checks if
+// the other log source contains a super set of the commit entries.
 func ContainsAllCommitedByCandidate(
-	me int,
-	candidate int,
-	logs []LogEntry,
-	commitProgress int,
+	localLogs []LogEntry,
 	candidateHighestLogTerm int,
 	candidateLogProgress int,
 ) bool {
-	//fmt.Printf("$$ candidate=%d|voter=%d: commitProgress=%d candidateLogTerm=%d candidateLogProgress=%d\n",
-	//	candidate, me, commitProgress, candidateHighestLogTerm, candidateLogProgress)
+	logProgress := len(localLogs)
 
-	if commitProgress == 0 {
+	if logProgress == 0 {
 		return true
 	}
 
-	highestCommitedTerm := logs[commitProgress-1].Term
-	if candidateHighestLogTerm > highestCommitedTerm {
+	highestLogTerm := localLogs[logProgress-1].Term
+	if candidateHighestLogTerm > highestLogTerm {
 		return true
-	} else if candidateHighestLogTerm == highestCommitedTerm {
-		return candidateLogProgress >= commitProgress
+	} else if candidateHighestLogTerm == highestLogTerm {
+		return candidateLogProgress >= logProgress
 	} else {
 		return false
 	}
@@ -61,10 +59,7 @@ func (rf *Raft) RequestVote(
 	rf.termRoleHolder.RequestTermUpgradeTo(args.CandidateTerm)
 
 	if !ContainsAllCommitedByCandidate(
-		rf.me,
-		args.CandidateId,
 		rf.logs,
-		rf.commitProgress,
 		args.CandidateHighestLogTerm,
 		args.CandidateLogProgress) {
 		reply.VoteGranted = false
