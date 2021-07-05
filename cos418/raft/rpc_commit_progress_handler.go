@@ -1,6 +1,8 @@
 package raft
 
-import "cos418/cos418/labrpc"
+import (
+	"cos418/cos418/labrpc"
+)
 
 // It sends all the specified log entries in [start, end) to the targetChannel
 // sequentially. It's a blocking process.
@@ -43,7 +45,7 @@ func SyncWithGlobalCommitProgress(
 	}
 
 	if currentCommitProgress > stateMachineProgress {
-		go SendLogsToStateMachine(
+		SendLogsToStateMachine(
 			logs,
 			stateMachineProgress, currentCommitProgress,
 			applyCh)
