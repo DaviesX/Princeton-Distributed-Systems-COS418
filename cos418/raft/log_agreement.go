@@ -134,7 +134,7 @@ func CommitProgress(peersLogProgress []int) int {
 // Notifies the commit progress that is safe for the peer at the moment, so
 // peers can push commited logs to their state mahcine. However, it doesn't
 // guarantee synchronization.
-func NotifyCommitProgressAsync(
+func NotifyCommitProgress(
 	from RaftNodeId,
 	leaderCommitProgress int,
 	targetsReplicationProgress []int,
@@ -142,6 +142,10 @@ func NotifyCommitProgressAsync(
 	term RaftTerm,
 ) {
 	for i := 0; i < len(targets); i++ {
+		if RaftNodeId(i) == from {
+			continue
+		}
+
 		var args NotifyCommitProgressArgs
 		args.LeaderTerm = term
 		if targetsReplicationProgress[i] < leaderCommitProgress {
@@ -150,7 +154,8 @@ func NotifyCommitProgressAsync(
 			args.SafeCommitProgress = leaderCommitProgress
 		}
 
-		go SendNotifyCommitProgress(
+		// TODO: Makes this call async.
+		SendNotifyCommitProgress(
 			targets[i], args, new(NotifyCommitProgressReply))
 	}
 }

@@ -31,7 +31,7 @@ type RaftInternalInterface interface {
 	// Extracts information to determine the log source's up-to-dateness.
 	LogLiveness() LogLiveness
 
-	//
+	// Notifies the node that it might become a leader shortly.
 	PrepareForLeadership()
 
 	// Pushes out log entries to the peers and commits those that are accepted
@@ -95,6 +95,7 @@ func (rf *Raft) PublishAndCommit(term RaftTerm) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	// Propagates logs to the peers to replicate.
 	newPeersLogProgress, err := PublishLogs(
 		rf.me,
 		term,
@@ -108,9 +109,17 @@ func (rf *Raft) PublishAndCommit(term RaftTerm) {
 	}
 	rf.peersLogProgress = newPeersLogProgress
 
+	// Determines which log entries can be safely committed.
 	newCommitProgress := CommitProgress(newPeersLogProgress)
+
+	// Propagates commit progress to the leader itself and to the peers.
 	if newCommitProgress > rf.commitProgress {
-		NotifyCommitProgressAsync(
+		rf.commitProgress, rf.stateMachineProgress =
+			UpdateCommitProgress(
+				newCommitProgress, rf.commitProgress,
+				rf.stateMachineProgress, rf.logs, rf.applyCh)
+
+		NotifyCommitProgress(
 			rf.me,
 			newCommitProgress,
 			newPeersLogProgress,
