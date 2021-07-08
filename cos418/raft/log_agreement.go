@@ -2,9 +2,9 @@ package raft
 
 import (
 	"cos418/cos418/labrpc"
-	"errors"
 	"fmt"
 	"sort"
+	"sync"
 )
 
 // Finds a concatenation point before which rids the peer of log conflicts
@@ -19,10 +19,15 @@ func SyncLogsWithPeer(
 	allLogs []LogEntry,
 	peer *labrpc.ClientEnd,
 	peerReplicationProgress int,
-) (int, error) {
+	newPeerReplicationProgress *int,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+
 	if peerReplicationProgress == len(allLogs) {
 		// The peer is up-to-date.
-		return peerReplicationProgress, nil
+		*newPeerReplicationProgress = peerReplicationProgress
+		return
 	}
 
 	var concatFrom int
@@ -55,22 +60,27 @@ func SyncLogsWithPeer(
 		ok := SendAppendEntries(peer, arg, &reply)
 		if !ok {
 			// Peer unreachable.
-			return peerReplicationProgress, nil
+			*newPeerReplicationProgress = peerReplicationProgress
+			return
 		}
 
 		if reply.TermHold > publisherTerm {
-			errorMsg := fmt.Sprintf(
+			// Leader is outdated.
+			fmt.Printf(
 				"leader outdated: publisherTerm=%d, replicationNodeTerm=%d",
 				publisherTerm, reply.TermHold)
-			return 0, errors.New(errorMsg)
+
+			*newPeerReplicationProgress = peerReplicationProgress
+			return
 		}
 
 		if reply.Concatenable {
-			return len(allLogs), nil
+			*newPeerReplicationProgress = len(allLogs)
+			return
 		}
 	}
 
-	return 0, errors.New("logical error")
+	panic("logical error")
 }
 
 // Broadcasts log entries around the peers, so they can reconcile conflicts
@@ -84,11 +94,12 @@ func PublishLogs(
 	allLogs []LogEntry,
 	peers []*labrpc.ClientEnd,
 	peersLogProgress []int,
-) ([]int, error) {
+) []int {
 	if len(allLogs) == 0 {
-		return peersLogProgress, nil
+		return peersLogProgress
 	}
 
+	var wg sync.WaitGroup
 	newPeersLogProgress := make([]int, len(peers))
 
 	for i, peer := range peers {
@@ -97,21 +108,18 @@ func PublishLogs(
 			continue
 		}
 
-		// TODO: Makes this call async.
-		newReplicationProgress, err := SyncLogsWithPeer(
+		wg.Add(1)
+		go SyncLogsWithPeer(
 			publishFrom, publisherTerm,
 			allLogs,
-			peer, peersLogProgress[i])
-		if err != nil {
-			// Leader is outdated. Let other leaders conduct synchronization
-			// instead.
-			return peersLogProgress, err
-		}
-
-		newPeersLogProgress[i] = newReplicationProgress
+			peer, peersLogProgress[i],
+			&newPeersLogProgress[i],
+			&wg)
 	}
 
-	return newPeersLogProgress, nil
+	wg.Wait()
+
+	return newPeersLogProgress
 }
 
 // Decides what the commit progress is based on peers' replication progress.
@@ -141,6 +149,8 @@ func NotifyCommitProgress(
 	targets []*labrpc.ClientEnd,
 	term RaftTerm,
 ) {
+	var wg sync.WaitGroup
+
 	for i := 0; i < len(targets); i++ {
 		if RaftNodeId(i) == from {
 			continue
@@ -154,8 +164,13 @@ func NotifyCommitProgress(
 			args.SafeCommitProgress = leaderCommitProgress
 		}
 
-		// TODO: Makes this call async.
-		SendNotifyCommitProgress(
-			targets[i], args, new(NotifyCommitProgressReply))
+		wg.Add(1)
+		go SendNotifyCommitProgress(
+			targets[i],
+			args,
+			new(NotifyCommitProgressReply),
+			&wg)
 	}
+
+	wg.Wait()
 }

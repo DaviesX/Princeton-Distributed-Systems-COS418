@@ -2,7 +2,6 @@ package raft
 
 import (
 	"cos418/cos418/labrpc"
-	"fmt"
 )
 
 // The following properties decide how up-to-date a log source is.
@@ -96,17 +95,12 @@ func (rf *Raft) PublishAndCommit(term RaftTerm) {
 	defer rf.mu.Unlock()
 
 	// Propagates logs to the peers to replicate.
-	newPeersLogProgress, err := PublishLogs(
+	newPeersLogProgress := PublishLogs(
 		rf.me,
 		term,
 		rf.logs,
 		rf.peers,
 		rf.peersLogProgress)
-	if err != nil {
-		fmt.Printf(
-			"At node=%d|term=%d, encountered error=%s\n",
-			rf.me, term, err.Error())
-	}
 	rf.peersLogProgress = newPeersLogProgress
 
 	// Determines which log entries can be safely committed.
