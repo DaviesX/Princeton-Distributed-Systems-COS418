@@ -8,13 +8,13 @@ import (
 // The following properties decide how up-to-date a log source is.
 type LogLiveness struct {
 	LogProgress    int
-	HighestLogTerm int
+	HighestLogTerm RaftTerm
 }
 
 // Operations used internally by the raft role maintainer thread.
 type RaftInternalInterface interface {
 	// ID of the raft node.
-	WhoIAm() int
+	WhoIAm() RaftNodeId
 
 	// Peers to the raft node indexed by node ID. Note that the current raft
 	// node also needs to be included in the array.
@@ -31,15 +31,18 @@ type RaftInternalInterface interface {
 	// Extracts information to determine the log source's up-to-dateness.
 	LogLiveness() LogLiveness
 
+	//
+	PrepareForLeadership()
+
 	// Pushes out log entries to the peers and commits those that are accepted
 	// by a quorum.
-	PublishAndCommit()
+	PublishAndCommit(term RaftTerm)
 
 	// Is the raft node shutting down.
 	ShouldShutdown() bool
 }
 
-func (rf *Raft) WhoIAm() int {
+func (rf *Raft) WhoIAm() RaftNodeId {
 	return rf.me
 }
 
@@ -64,8 +67,10 @@ func (rf *Raft) TermRoleHolder() *TermRoleHolder {
 }
 
 func (rf *Raft) LogLiveness() LogLiveness {
-	var result LogLiveness
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	var result LogLiveness
 	result.LogProgress = len(rf.logs)
 
 	if len(rf.logs) == 0 {
@@ -77,32 +82,41 @@ func (rf *Raft) LogLiveness() LogLiveness {
 	return result
 }
 
-func (rf *Raft) PublishAndCommit() {
-	currentTerm, _ := rf.termRoleHolder.CurrentTermRole()
+func (rf *Raft) PrepareForLeadership() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	for i := 0; i < len(rf.peersLogProgress); i++ {
+		rf.peersLogProgress[i] = -1
+	}
+}
+
+func (rf *Raft) PublishAndCommit(term RaftTerm) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	newPeersLogProgress, err := PublishLogs(
 		rf.me,
-		currentTerm,
+		term,
 		rf.logs,
 		rf.peers,
 		rf.peersLogProgress)
 	if err != nil {
 		fmt.Printf(
 			"At node=%d|term=%d, encountered error=%s\n",
-			rf.me, currentTerm, err.Error())
+			rf.me, term, err.Error())
 	}
 	rf.peersLogProgress = newPeersLogProgress
 
 	newCommitProgress := CommitProgress(newPeersLogProgress)
-
-	NotifyCommitProgressAsync(
-		rf.me,
-		newCommitProgress,
-		rf.peers,
-		currentTerm)
+	if newCommitProgress > rf.commitProgress {
+		NotifyCommitProgressAsync(
+			rf.me,
+			newCommitProgress,
+			newPeersLogProgress,
+			rf.peers,
+			term)
+	}
 }
 
 func (rf *Raft) ShouldShutdown() bool {

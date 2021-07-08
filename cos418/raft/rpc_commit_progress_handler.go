@@ -21,29 +21,28 @@ func SendLogsToStateMachine(
 	}
 }
 
-// Synchronizes local commit progress with the global commit progress and
-// pushes all the commit log commands to the state machine connected to by the
-// applyCh. It will return the updated local commit progress and state machine
-// progress.
-func SyncWithGlobalCommitProgress(
-	globalCommitProgress int,
+// Synchronizes local commit progress with the commit progress requested by the
+// leader and pushes all the commit log commands to the state machine connected
+// to by the applyCh. It will return the updated local commit progress and
+// state machine progress.
+func UpdateCommitProgress(
+	safeCommitProgress int,
 	currentCommitProgress int,
 	stateMachineProgress int,
 	logs []LogEntry,
 	applyCh chan ApplyMsg,
 ) (int, int) {
-	if globalCommitProgress <= currentCommitProgress {
+	if safeCommitProgress <= currentCommitProgress {
 		// Nothing to commit.
 		return currentCommitProgress, stateMachineProgress
 	}
 
-	// Update commit progress and push logs to the state machine.
-	if globalCommitProgress <= len(logs) {
-		currentCommitProgress = globalCommitProgress
-	} else {
-		currentCommitProgress = len(logs)
+	if safeCommitProgress > len(logs) {
+		panic("The safe commit progress is out of bound.")
 	}
 
+	// Update commit progress and push logs to the state machine.
+	currentCommitProgress = safeCommitProgress
 	if currentCommitProgress > stateMachineProgress {
 		SendLogsToStateMachine(
 			logs,
@@ -57,8 +56,8 @@ func SyncWithGlobalCommitProgress(
 }
 
 type NotifyCommitProgressArgs struct {
-	LeaderTerm           int
-	GlobalCommitProgress int
+	LeaderTerm         RaftTerm
+	SafeCommitProgress int
 }
 
 type NotifyCommitProgressReply struct {
@@ -86,11 +85,12 @@ func (rf *Raft) NotifyCommitProgress(
 	// that the term has moved up. So we will update it here (perhaps coming
 	// from a heartbeat).
 	rf.followerSchedule.ConfirmHeartbeat()
-	rf.TermRoleHolder().RequestTermUpgradeTo(args.LeaderTerm)
+	rf.TermRoleHolder().UpgradeTerm(
+		rf.me, args.LeaderTerm, TUREncouteredHigherTermMessage)
 
 	rf.commitProgress, rf.stateMachineProgress =
-		SyncWithGlobalCommitProgress(
-			args.GlobalCommitProgress, rf.commitProgress,
+		UpdateCommitProgress(
+			args.SafeCommitProgress, rf.commitProgress,
 			rf.stateMachineProgress, rf.logs, rf.applyCh)
 
 	reply.Success = true

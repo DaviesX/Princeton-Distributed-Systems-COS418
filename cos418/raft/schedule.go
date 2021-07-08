@@ -6,20 +6,27 @@ import (
 )
 
 const (
-	HeartbeatInterval         = 200
-	HeartbeatTimeoutMinMillis = 5 * HeartbeatInterval
-	HeartbeatTimeoutMaxMillis = 10 * HeartbeatInterval
-	ElectionTimeout           = 4 * HeartbeatInterval
+	HeartbeatInterval         = 500
+	HeartbeatTimeoutMinMillis = 600
+	HeartbeatTimeoutMaxMillis = 1200
+	ElectionTimeout           = 300
 )
 
 // Controls the raft role maintainer thread and provides time measurement of
 // heartbeat intervals.
 type FollowerSchedule struct {
-	clock int
+	clock         int
+	timeoutMillis int
 }
 
 func NewFollowerSchedule() *FollowerSchedule {
-	return new(FollowerSchedule)
+	fs := new(FollowerSchedule)
+
+	fs.clock = 0
+	fs.timeoutMillis = HeartbeatTimeoutMinMillis +
+		rand.Intn(HeartbeatTimeoutMaxMillis-HeartbeatTimeoutMinMillis)
+
+	return fs
 }
 
 // Tells the follower schedule that a heartbeat arrives at this particular
@@ -29,22 +36,10 @@ func (fs *FollowerSchedule) ConfirmHeartbeat() {
 }
 
 // Waits for a heartbeat to arrive. If there is at least one heartbeat arrives
-// before the timeout, it returns true. Otherwise, it returns false. It also
-// let the caller to perform a quick repeated task while waiting.
-func (fs *FollowerSchedule) WaitForHeartbeat(preemptWithTaskFn func()) bool {
+// before the timeout, it returns true. Otherwise, it returns false.
+func (fs *FollowerSchedule) WaitForHeartbeat() bool {
 	clockMark := fs.clock
-
-	timeoutMillis := HeartbeatTimeoutMinMillis +
-		rand.Intn(HeartbeatTimeoutMaxMillis-HeartbeatTimeoutMinMillis)
-
-	for i := 0; i < timeoutMillis; i++ {
-		if preemptWithTaskFn != nil {
-			preemptWithTaskFn()
-		}
-
-		time.Sleep(1 * time.Millisecond)
-	}
-
+	time.Sleep(time.Duration(fs.timeoutMillis) * time.Millisecond)
 	return fs.clock > clockMark
 }
 

@@ -7,7 +7,7 @@ import (
 
 // A log entry is a command timestamped by the leader's term when it's created.
 type LogEntry struct {
-	Term    int
+	Term    RaftTerm
 	Command interface{}
 }
 
@@ -77,7 +77,7 @@ func OverwriteWithForeignLogs(
 // to persist the updated logs.
 func AppendLog(
 	command interface{},
-	currentTerm int,
+	currentTerm RaftTerm,
 	logs *[]LogEntry,
 	persistFn func(logs []LogEntry),
 ) {

@@ -44,7 +44,7 @@ type Raft struct {
 	mu        sync.Mutex
 	peers     []*labrpc.ClientEnd
 	persister *Persister
-	me        int // index into peers[]
+	me        RaftNodeId // index into peers[]
 	applyCh   chan ApplyMsg
 
 	// Raft role schedules.
@@ -68,7 +68,7 @@ type Raft struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 	term, role := rf.termRoleHolder.CurrentTermRole()
-	return term, role == RaftLeader
+	return int(term), role == RaftLeader
 }
 
 // Saves Raft's persistent state to stable storage,
@@ -122,17 +122,18 @@ func (rf *Raft) Start(
 			})
 		rf.peersLogProgress[rf.me] = len(rf.logs)
 
-		fmt.Printf("** At=%d: added log=(command=%d, index=%d, term=%d)\n",
-			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
-
 		rf.mu.Unlock()
 
-		// Asks the followers to replicate.
+		fmt.Printf("At node=%d: ** added log=(command=%d, index=%d, term=%d)\n",
+			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
+
+		// Wakes up the raft role maintainer thread to immediately start
+		// log replication.
 		rf.leaderSchedule.Preempt()
 
-		return len(rf.logs), currentTerm, true
+		return len(rf.logs), int(currentTerm), true
 	default:
-		return -1, currentTerm, false
+		return -1, int(currentTerm), false
 	}
 }
 
@@ -159,7 +160,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf := new(Raft)
 	rf.peers = peers
 	rf.persister = persister
-	rf.me = me
+	rf.me = RaftNodeId(me)
 	rf.applyCh = applyCh
 
 	rf.followerSchedule = NewFollowerSchedule()

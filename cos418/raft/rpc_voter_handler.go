@@ -5,10 +5,10 @@ import (
 )
 
 type RequestVoteArgs struct {
-	CandidateId             int
-	CandidateTerm           int
+	CandidateId             RaftNodeId
+	CandidateTerm           RaftTerm
 	CandidateLogProgress    int
-	CandidateHighestLogTerm int
+	CandidateHighestLogTerm RaftTerm
 }
 
 type RequestVoteReply struct {
@@ -21,7 +21,7 @@ type RequestVoteReply struct {
 // the other log source contains a super set of the commit entries.
 func ContainsAllCommitedByCandidate(
 	localLogs []LogEntry,
-	candidateHighestLogTerm int,
+	candidateHighestLogTerm RaftTerm,
 	candidateLogProgress int,
 ) bool {
 	logProgress := len(localLogs)
@@ -56,7 +56,8 @@ func (rf *Raft) RequestVote(
 		return
 	}
 
-	rf.termRoleHolder.RequestTermUpgradeTo(args.CandidateTerm)
+	rf.termRoleHolder.UpgradeTerm(
+		rf.me, args.CandidateTerm, TUREncouteredHigherTermMessage)
 
 	if !ContainsAllCommitedByCandidate(
 		rf.logs,

@@ -2,28 +2,31 @@ package raft
 
 import (
 	"encoding/gob"
+	"fmt"
 	"sync"
 )
 
-type TermUpgradeRequest struct {
-	newTerm int
-	signal  chan bool
-}
+type RaftTerm int
+type RaftRole string
+
+const (
+	RaftFollower  RaftRole = "RaftFollower"
+	RaftCandidate RaftRole = "RaftCandidate"
+	RaftLeader    RaftRole = "RaftLeader"
+)
 
 // Ensures the term is updated to increase monotonically while proper
 // components get notified. Also, raft role is coupled with the term number,
 // it guarantees atomic update action to the term-role pair.
 type TermRoleHolder struct {
-	lock     sync.Mutex
-	requests []*TermUpgradeRequest
-	term     int
-	role     RaftRole
+	lock sync.Mutex
+	term RaftTerm
+	role RaftRole
 }
 
 func NewTermRoleHolder() *TermRoleHolder {
 	th := new(TermRoleHolder)
 
-	th.requests = make([]*TermUpgradeRequest, 0)
 	th.term = 0
 	th.role = RaftFollower
 
@@ -31,66 +34,36 @@ func NewTermRoleHolder() *TermRoleHolder {
 }
 
 // Atomically reads the current term-role pair.
-func (th *TermRoleHolder) CurrentTermRole() (int, RaftRole) {
+func (th *TermRoleHolder) CurrentTermRole() (RaftTerm, RaftRole) {
 	th.lock.Lock()
 	defer th.lock.Unlock()
 
 	return th.term, th.role
 }
 
-// Requests a partial update to the term and blocks, but only completes the
-// update when another thread supplies the role with the term update. It will
-// unblock when another thread accepts/rejects the term update.
-func (th *TermRoleHolder) RequestTermUpgradeTo(newTerm int) {
-	if newTerm <= th.term {
-		return
-	}
+type TermUpgradeReason string
 
-	th.lock.Lock()
+const (
+	TURLackOfHeartbeat             TermUpgradeReason = "LackOfHeartbeat"
+	TURSplitVotes                  TermUpgradeReason = "SplitVotes"
+	TURWonAnElection               TermUpgradeReason = "WonAnElection"
+	TUREncouteredHigherTermMessage TermUpgradeReason = "EncounteredHigherTermMessage"
+)
 
-	newRequest := new(TermUpgradeRequest)
-	newRequest.newTerm = newTerm
-	newRequest.signal = make(chan bool)
-
-	th.requests = append(th.requests, newRequest)
-
-	th.lock.Unlock()
-
-	<-newRequest.signal
-}
-
-// Checks if there is any pending partial term update. If so, it retrieves one
-// and tries to apply it. If the update makes a monotonic increase in term,
-// then it takes the specified role and completes the update.
-func (th *TermRoleHolder) ApplyPendingTermRoleUpgrade(
-	roleIfUpgradable RaftRole,
-) bool {
-	th.lock.Lock()
-	defer th.lock.Unlock()
-
-	upgradable := false
-
-	for len(th.requests) > 0 {
-		// Apply all requests at once.
-		newRequest := th.requests[0]
-		th.requests = th.requests[1:]
-
-		if newRequest.newTerm > th.term {
-			th.term = newRequest.newTerm
-			th.role = roleIfUpgradable
-			upgradable = true
-		}
-
-		newRequest.signal <- true
-	}
-
-	return upgradable
-}
-
-// Updates the term-role pair if the term increases/keeps the current value.
-func (th *TermRoleHolder) ApplyTermRoleUpgrade(
-	newTerm int,
-	roleIfUpgradable RaftRole,
+// It helps put the holder into the correct raft term-role pair by detecting
+// the transition condition. Or more precisely, it implements the state
+// machine:
+//                                             == Re-elction ==
+//                                            ||              ||
+//                   === times out ====> {CANDIDATE} <=========
+//                  ||                     ||    ||
+// Starts up => {FOLLOWER} <= higher term ==      == majority vote => {LEADER}
+//                  |^|                                                  ||
+//                   ==================== higher term ====================
+func (th *TermRoleHolder) UpgradeTerm(
+	nodeId RaftNodeId,
+	newTerm RaftTerm,
+	reason TermUpgradeReason,
 ) bool {
 	th.lock.Lock()
 	defer th.lock.Unlock()
@@ -98,9 +71,63 @@ func (th *TermRoleHolder) ApplyTermRoleUpgrade(
 	if newTerm < th.term {
 		return false
 	}
+	if newTerm == th.term &&
+		reason == TUREncouteredHigherTermMessage {
+		// newTerm must be a higher term than the existing.
+		return false
+	}
+
+	var newRole RaftRole
+
+	switch th.role {
+	case RaftFollower:
+		switch reason {
+		case TURLackOfHeartbeat:
+			newRole = RaftCandidate
+		case TUREncouteredHigherTermMessage:
+			newRole = RaftFollower
+		default:
+			fmt.Printf("At node=%d: illegal term upgrade reason=%s\n",
+				nodeId, reason)
+			return false
+		}
+	case RaftCandidate:
+		switch reason {
+		case TURLackOfHeartbeat:
+			newRole = RaftCandidate
+		case TURSplitVotes:
+			newRole = RaftCandidate
+		case TURWonAnElection:
+			newRole = RaftLeader
+		case TUREncouteredHigherTermMessage:
+			newRole = RaftFollower
+		default:
+			fmt.Printf("At node=%d: illegal term upgrade reason=%s\n",
+				nodeId, reason)
+			return false
+		}
+	case RaftLeader:
+		switch reason {
+		case TURLackOfHeartbeat:
+			newRole = RaftLeader
+		case TUREncouteredHigherTermMessage:
+			newRole = RaftFollower
+		default:
+			fmt.Printf("At node=%d: illegal term upgrade reason=%s\n",
+				nodeId, reason)
+			return false
+		}
+	}
+
+	fmt.Printf("At node=%d: term=%d->%d role=%s->%s reason=%s\n",
+		nodeId,
+		th.term, newTerm,
+		th.role, newRole,
+		reason)
 
 	th.term = newTerm
-	th.role = roleIfUpgradable
+	th.role = newRole
+
 	return true
 }
 

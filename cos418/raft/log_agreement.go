@@ -14,13 +14,25 @@ import (
 // Failing to connect to the peer doesn't count as failure, as we do expect
 // network partition.
 func SyncLogsWithPeer(
-	publishFrom int,
-	publisherTerm int,
+	publishFrom RaftNodeId,
+	publisherTerm RaftTerm,
 	allLogs []LogEntry,
 	peer *labrpc.ClientEnd,
 	peerReplicationProgress int,
 ) (int, error) {
-	for concatFrom := peerReplicationProgress; concatFrom >= 0; concatFrom-- {
+	if peerReplicationProgress == len(allLogs) {
+		// The peer is up-to-date.
+		return peerReplicationProgress, nil
+	}
+
+	var concatFrom int
+	if peerReplicationProgress == -1 {
+		concatFrom = len(allLogs)
+	} else {
+		concatFrom = peerReplicationProgress
+	}
+
+	for ; concatFrom >= 0; concatFrom-- {
 		var arg AppendEntriesArgs
 		arg.LeaderId = publishFrom
 		arg.LeaderTerm = publisherTerm
@@ -67,8 +79,8 @@ func SyncLogsWithPeer(
 // it returns the updated progresses for the caller to decide which logs have
 // reached censensus.
 func PublishLogs(
-	publishFrom int,
-	publisherTerm int,
+	publishFrom RaftNodeId,
+	publisherTerm RaftTerm,
 	allLogs []LogEntry,
 	peers []*labrpc.ClientEnd,
 	peersLogProgress []int,
@@ -80,7 +92,7 @@ func PublishLogs(
 	newPeersLogProgress := make([]int, len(peers))
 
 	for i, peer := range peers {
-		if i == publishFrom {
+		if RaftNodeId(i) == publishFrom {
 			newPeersLogProgress[i] = peersLogProgress[i]
 			continue
 		}
@@ -119,20 +131,25 @@ func CommitProgress(peersLogProgress []int) int {
 	return progresses[numPeers/2]
 }
 
-// Notifies leader's commit progress amount the peers, so peers can push
-// commited logs to their state mahcine. However, it doesn't guarantee
-// synchronization.
+// Notifies the commit progress that is safe for the peer at the moment, so
+// peers can push commited logs to their state mahcine. However, it doesn't
+// guarantee synchronization.
 func NotifyCommitProgressAsync(
-	from int,
+	from RaftNodeId,
 	leaderCommitProgress int,
+	targetsReplicationProgress []int,
 	targets []*labrpc.ClientEnd,
-	term int,
+	term RaftTerm,
 ) {
-	var args NotifyCommitProgressArgs
-	args.LeaderTerm = term
-	args.GlobalCommitProgress = leaderCommitProgress
-
 	for i := 0; i < len(targets); i++ {
+		var args NotifyCommitProgressArgs
+		args.LeaderTerm = term
+		if targetsReplicationProgress[i] < leaderCommitProgress {
+			args.SafeCommitProgress = targetsReplicationProgress[i]
+		} else {
+			args.SafeCommitProgress = leaderCommitProgress
+		}
+
 		go SendNotifyCommitProgress(
 			targets[i], args, new(NotifyCommitProgressReply))
 	}

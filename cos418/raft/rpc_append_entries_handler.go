@@ -7,7 +7,7 @@ import (
 
 func Concatenable(
 	overrideFrom int,
-	precedingLogTerm int,
+	precedingLogTerm RaftTerm,
 	localLogs []LogEntry,
 	localCommitIndex int,
 ) bool {
@@ -25,16 +25,16 @@ func Concatenable(
 }
 
 type AppendEntriesArgs struct {
-	LeaderTerm           int
-	LeaderId             int
+	LeaderId             RaftNodeId
+	LeaderTerm           RaftTerm
 	StartIndex           int
-	PrevLogTerm          int // For concatenability check.
+	PrevLogTerm          RaftTerm // For concatenability check.
 	SerializedLogEntries []byte
 }
 
 type AppendEntriesReply struct {
 	Concatenable bool
-	TermHold     int
+	TermHold     RaftTerm
 }
 
 // It handles messages sent from the client (leader). It only proceed to
@@ -58,7 +58,8 @@ func (rf *Raft) AppendEntries(
 		return
 	}
 
-	rf.termRoleHolder.RequestTermUpgradeTo(args.LeaderTerm)
+	rf.termRoleHolder.UpgradeTerm(
+		rf.me, args.LeaderTerm, TUREncouteredHigherTermMessage)
 
 	if !Concatenable(
 		args.StartIndex,
@@ -107,7 +108,7 @@ func SendAppendEntries(
 	ready := false
 
 	go SendAppendEntriesAsync(target, args, reply, &ok, &ready)
-	for i := 0; i < 500 && !ready; i++ {
+	for i := 0; i < 1000 && !ready; i++ {
 		time.Sleep(100 * time.Microsecond)
 	}
 
