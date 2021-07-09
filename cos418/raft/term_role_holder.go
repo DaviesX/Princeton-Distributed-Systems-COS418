@@ -9,6 +9,8 @@ import (
 type RaftTerm int
 type RaftRole string
 
+const NilTerm RaftTerm = -1
+
 const (
 	RaftFollower  RaftRole = "RaftFollower"
 	RaftCandidate RaftRole = "RaftCandidate"

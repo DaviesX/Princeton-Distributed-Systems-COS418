@@ -100,6 +100,7 @@ func (rf *Raft) PublishAndCommit(term RaftTerm) {
 		term,
 		rf.logs,
 		rf.peers,
+		rf.peersCongestionMonitor,
 		rf.peersLogProgress)
 	rf.peersLogProgress = newPeersLogProgress
 
@@ -107,19 +108,18 @@ func (rf *Raft) PublishAndCommit(term RaftTerm) {
 	newCommitProgress := CommitProgress(newPeersLogProgress)
 
 	// Propagates commit progress to the leader itself and to the peers.
-	if newCommitProgress > rf.commitProgress {
-		rf.commitProgress, rf.stateMachineProgress =
-			UpdateCommitProgress(
-				newCommitProgress, rf.commitProgress,
-				rf.stateMachineProgress, rf.logs, rf.applyCh)
+	rf.commitProgress, rf.stateMachineProgress =
+		UpdateCommitProgress(
+			newCommitProgress, rf.commitProgress,
+			rf.stateMachineProgress, rf.logs, rf.applyCh)
 
-		NotifyCommitProgress(
-			rf.me,
-			newCommitProgress,
-			newPeersLogProgress,
-			rf.peers,
-			term)
-	}
+	NotifyCommitProgress(
+		rf.me,
+		newCommitProgress,
+		newPeersLogProgress,
+		rf.peers,
+		rf.peersCongestionMonitor,
+		term)
 }
 
 func (rf *Raft) ShouldShutdown() bool {

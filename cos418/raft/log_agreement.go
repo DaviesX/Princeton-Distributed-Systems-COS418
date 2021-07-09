@@ -18,6 +18,7 @@ func SyncLogsWithPeer(
 	publisherTerm RaftTerm,
 	allLogs []LogEntry,
 	peer *labrpc.ClientEnd,
+	peerCongestionMonitor *CongestionMonitor,
 	peerReplicationProgress int,
 	newPeerReplicationProgress *int,
 	wg *sync.WaitGroup,
@@ -57,7 +58,7 @@ func SyncLogsWithPeer(
 		}
 
 		var reply AppendEntriesReply
-		ok := SendAppendEntries(peer, arg, &reply)
+		ok := SendAppendEntries(peer, arg, &reply, peerCongestionMonitor)
 		if !ok {
 			// Peer unreachable.
 			*newPeerReplicationProgress = peerReplicationProgress
@@ -67,7 +68,7 @@ func SyncLogsWithPeer(
 		if reply.TermHold > publisherTerm {
 			// Leader is outdated.
 			fmt.Printf(
-				"leader outdated: publisherTerm=%d, replicationNodeTerm=%d",
+				"leader outdated: publisherTerm=%d, replicationNodeTerm=%d\n",
 				publisherTerm, reply.TermHold)
 
 			*newPeerReplicationProgress = peerReplicationProgress
@@ -93,6 +94,7 @@ func PublishLogs(
 	publisherTerm RaftTerm,
 	allLogs []LogEntry,
 	peers []*labrpc.ClientEnd,
+	peersCongestionMonitor []*CongestionMonitor,
 	peersLogProgress []int,
 ) []int {
 	if len(allLogs) == 0 {
@@ -112,7 +114,7 @@ func PublishLogs(
 		go SyncLogsWithPeer(
 			publishFrom, publisherTerm,
 			allLogs,
-			peer, peersLogProgress[i],
+			peer, peersCongestionMonitor[i], peersLogProgress[i],
 			&newPeersLogProgress[i],
 			&wg)
 	}
@@ -147,6 +149,7 @@ func NotifyCommitProgress(
 	leaderCommitProgress int,
 	targetsReplicationProgress []int,
 	targets []*labrpc.ClientEnd,
+	targetsCongestionMonitor []*CongestionMonitor,
 	term RaftTerm,
 ) {
 	var wg sync.WaitGroup
@@ -167,6 +170,7 @@ func NotifyCommitProgress(
 		wg.Add(1)
 		go SendNotifyCommitProgress(
 			targets[i],
+			targetsCongestionMonitor[i],
 			args,
 			new(NotifyCommitProgressReply),
 			&wg)

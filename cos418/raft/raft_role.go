@@ -6,8 +6,6 @@ import (
 	"sync"
 )
 
-const NilTerm = -1
-
 func CollectVoteFrom(
 	target *labrpc.ClientEnd,
 	candidateId RaftNodeId,

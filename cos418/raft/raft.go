@@ -41,11 +41,12 @@ type ApplyMsg struct {
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
-	mu        sync.Mutex
-	peers     []*labrpc.ClientEnd
-	persister *Persister
-	me        RaftNodeId // index into peers[]
-	applyCh   chan ApplyMsg
+	mu                     sync.Mutex
+	peers                  []*labrpc.ClientEnd
+	peersCongestionMonitor []*CongestionMonitor
+	persister              *Persister
+	me                     RaftNodeId // index into peers[]
+	applyCh                chan ApplyMsg
 
 	// Raft role schedules.
 	followerSchedule  *FollowerSchedule
@@ -159,6 +160,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := new(Raft)
 	rf.peers = peers
+	rf.peersCongestionMonitor = make([]*CongestionMonitor, len(peers))
+	for i := 0; i < len(peers); i++ {
+		rf.peersCongestionMonitor[i] = NewCongestionMonitor(
+			RaftNodeId(i))
+	}
 	rf.persister = persister
 	rf.me = RaftNodeId(me)
 	rf.applyCh = applyCh

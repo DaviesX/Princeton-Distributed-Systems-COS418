@@ -3,6 +3,7 @@ package raft
 import (
 	"cos418/cos418/labrpc"
 	"sync"
+	"time"
 )
 
 // It sends all the specified log entries in [start, end) to the targetChannel
@@ -97,13 +98,36 @@ func (rf *Raft) NotifyCommitProgress(
 	reply.Success = true
 }
 
+func SendNotifyCommitProgressAsync(
+	target *labrpc.ClientEnd,
+	args NotifyCommitProgressArgs,
+	reply *NotifyCommitProgressReply,
+	ok *bool,
+	cm *CongestionMonitor,
+	doneCh chan bool,
+) {
+	*ok = target.Call("Raft.NotifyCommitProgress", args, reply)
+	cm.Done(doneCh)
+}
+
 func SendNotifyCommitProgress(
 	target *labrpc.ClientEnd,
+	cm *CongestionMonitor,
 	args NotifyCommitProgressArgs,
 	reply *NotifyCommitProgressReply,
 	wg *sync.WaitGroup,
 ) bool {
 	defer wg.Done()
-	ok := target.Call("Raft.NotifyCommitProgress", args, reply)
+
+	if cm.Congested() {
+		return false
+	}
+
+	ok := false
+	doneCh := cm.Begin(100 * time.Millisecond)
+	go SendNotifyCommitProgressAsync(
+		target, args, reply, &ok, cm, doneCh)
+	cm.WaitForResult(doneCh)
+
 	return ok
 }

@@ -91,10 +91,11 @@ func SendAppendEntriesAsync(
 	args AppendEntriesArgs,
 	reply *AppendEntriesReply,
 	ok *bool,
-	ready *bool,
+	cm *CongestionMonitor,
+	doneCh chan bool,
 ) {
 	*ok = target.Call("Raft.AppendEntries", args, reply)
-	*ready = true
+	cm.Done(doneCh)
 }
 
 // Unlike the above SendAppendEntriesAsync() function, this funciton is
@@ -103,14 +104,17 @@ func SendAppendEntries(
 	target *labrpc.ClientEnd,
 	args AppendEntriesArgs,
 	reply *AppendEntriesReply,
+	cm *CongestionMonitor,
 ) bool {
-	ok := false
-	ready := false
-
-	go SendAppendEntriesAsync(target, args, reply, &ok, &ready)
-	for i := 0; i < 1000 && !ready; i++ {
-		time.Sleep(100 * time.Microsecond)
+	if cm.Congested() {
+		return false
 	}
+
+	ok := false
+	doneCh := cm.Begin(100 * time.Millisecond)
+	go SendAppendEntriesAsync(
+		target, args, reply, &ok, cm, doneCh)
+	cm.WaitForResult(doneCh)
 
 	return ok
 }

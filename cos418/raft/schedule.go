@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	HeartbeatInterval         = 500
-	HeartbeatTimeoutMinMillis = 600
-	HeartbeatTimeoutMaxMillis = 1200
-	ElectionTimeout           = 300
+	HeartbeatInterval         = 50
+	HeartbeatTimeoutMinMillis = 200
+	HeartbeatTimeoutMaxMillis = 500
+	ElectionTimeout           = 100
 )
 
 // Controls the raft role maintainer thread and provides time measurement of
@@ -39,6 +39,8 @@ func (fs *FollowerSchedule) ConfirmHeartbeat() {
 // before the timeout, it returns true. Otherwise, it returns false.
 func (fs *FollowerSchedule) WaitForHeartbeat() bool {
 	clockMark := fs.clock
+	fs.timeoutMillis = HeartbeatTimeoutMinMillis +
+		rand.Intn(HeartbeatTimeoutMaxMillis-HeartbeatTimeoutMinMillis)
 	time.Sleep(time.Duration(fs.timeoutMillis) * time.Millisecond)
 	return fs.clock > clockMark
 }
