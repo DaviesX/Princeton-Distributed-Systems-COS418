@@ -160,6 +160,7 @@ func NotifyCommitProgress(
 		}
 
 		var args NotifyCommitProgressArgs
+		args.LeaderId = from
 		args.LeaderTerm = term
 		if targetsReplicationProgress[i] < leaderCommitProgress {
 			args.SafeCommitProgress = targetsReplicationProgress[i]

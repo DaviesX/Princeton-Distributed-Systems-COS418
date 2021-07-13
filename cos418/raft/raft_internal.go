@@ -19,6 +19,8 @@ type RaftInternalInterface interface {
 	// node also needs to be included in the array.
 	Peers() []*labrpc.ClientEnd
 
+	PeersCongestionMonitor() []*CongestionMonitor
+
 	// Helps keep the raft role maintainer thread timed correctly.
 	FollowerSchedule() *FollowerSchedule
 	CandidateSchedule() *CandidateSchedule
@@ -47,6 +49,10 @@ func (rf *Raft) WhoIAm() RaftNodeId {
 
 func (rf *Raft) Peers() []*labrpc.ClientEnd {
 	return rf.peers
+}
+
+func (rf *Raft) PeersCongestionMonitor() []*CongestionMonitor {
+	return rf.peersCongestionMonitor
 }
 
 func (rf *Raft) FollowerSchedule() *FollowerSchedule {

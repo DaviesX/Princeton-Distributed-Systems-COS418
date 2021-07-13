@@ -13,6 +13,7 @@ func CollectVoteFrom(
 	logLiveness LogLiveness,
 	voteCount *int,
 	voteCountMutex *sync.Mutex,
+	targetCongestionMonitor *CongestionMonitor,
 ) {
 	var args RequestVoteArgs
 	args.CandidateId = candidateId
@@ -22,7 +23,7 @@ func CollectVoteFrom(
 
 	var reply RequestVoteReply
 
-	ok := SendRequestVote(target, args, &reply)
+	ok := SendRequestVote(target, args, &reply, targetCongestionMonitor)
 	if !ok || !reply.VoteGranted {
 		return
 	}
@@ -37,6 +38,7 @@ func StartElectionAsync(
 	term RaftTerm,
 	logLiveness LogLiveness,
 	peers []*labrpc.ClientEnd,
+	peersCongestionMonitor []*CongestionMonitor,
 ) *int {
 	voteCount := new(int)
 	*voteCount = 1 // Votes for itself.
@@ -50,7 +52,8 @@ func StartElectionAsync(
 		go CollectVoteFrom(
 			peers[i], candidateId,
 			term, logLiveness,
-			voteCount, voteCountMutex)
+			voteCount, voteCountMutex,
+			peersCongestionMonitor[i])
 	}
 
 	return voteCount
@@ -74,7 +77,8 @@ func DoCandidateCycle(
 		raft.WhoIAm(),
 		termToEstablish,
 		raft.LogLiveness(),
-		raft.Peers())
+		raft.Peers(),
+		raft.PeersCongestionMonitor())
 	raft.CandidateSchedule().WaitForElectionResult()
 
 	if *voteCount > len(raft.Peers())/2 {

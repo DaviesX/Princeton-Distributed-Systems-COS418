@@ -111,7 +111,7 @@ func SendAppendEntries(
 	}
 
 	ok := false
-	doneCh := cm.Begin(100 * time.Millisecond)
+	doneCh := cm.Begin(50 * time.Millisecond)
 	go SendAppendEntriesAsync(
 		target, args, reply, &ok, cm, doneCh)
 	cm.WaitForResult(doneCh)

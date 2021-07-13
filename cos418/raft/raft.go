@@ -128,9 +128,8 @@ func (rf *Raft) Start(
 		fmt.Printf("At node=%d: ** added log=(command=%d, index=%d, term=%d)\n",
 			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
 
-		// Wakes up the raft role maintainer thread to immediately start
-		// log replication.
-		rf.leaderSchedule.Preempt()
+		// The raft role maintainer thread will handle the replication
+		// automatically.
 
 		return len(rf.logs), int(currentTerm), true
 	default:

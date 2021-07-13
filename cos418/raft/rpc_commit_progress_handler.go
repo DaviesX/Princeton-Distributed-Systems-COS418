@@ -58,6 +58,7 @@ func UpdateCommitProgress(
 }
 
 type NotifyCommitProgressArgs struct {
+	LeaderId           RaftNodeId
 	LeaderTerm         RaftTerm
 	SafeCommitProgress int
 }
@@ -124,7 +125,7 @@ func SendNotifyCommitProgress(
 	}
 
 	ok := false
-	doneCh := cm.Begin(100 * time.Millisecond)
+	doneCh := cm.Begin(50 * time.Millisecond)
 	go SendNotifyCommitProgressAsync(
 		target, args, reply, &ok, cm, doneCh)
 	cm.WaitForResult(doneCh)

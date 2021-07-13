@@ -32,7 +32,7 @@ func (cm *CongestionMonitor) Congested() bool {
 	}
 
 	cm.numConsecutiveCongestions++
-	if cm.numConsecutiveCongestions > 20 {
+	if cm.numConsecutiveCongestions > 5 {
 		cm.numConsecutiveCongestions = 0
 		return false
 	}

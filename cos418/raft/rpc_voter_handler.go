@@ -2,6 +2,7 @@ package raft
 
 import (
 	"cos418/cos418/labrpc"
+	"time"
 )
 
 type RequestVoteArgs struct {
@@ -70,11 +71,32 @@ func (rf *Raft) RequestVote(
 	reply.VoteGranted = true
 }
 
+func SendRequestVoteAsync(
+	target *labrpc.ClientEnd,
+	args RequestVoteArgs,
+	reply *RequestVoteReply,
+	ok *bool,
+	cm *CongestionMonitor,
+	doneCh chan bool,
+) {
+	*ok = target.Call("Raft.RequestVote", args, reply)
+	cm.Done(doneCh)
+}
+
 func SendRequestVote(
 	target *labrpc.ClientEnd,
 	args RequestVoteArgs,
 	reply *RequestVoteReply,
+	cm *CongestionMonitor,
 ) bool {
-	ok := target.Call("Raft.RequestVote", args, reply)
+	if cm.Congested() {
+		return false
+	}
+
+	ok := false
+	doneCh := cm.Begin(50 * time.Millisecond)
+	go SendRequestVoteAsync(target, args, reply, &ok, cm, doneCh)
+	cm.WaitForResult(doneCh)
+
 	return ok
 }
