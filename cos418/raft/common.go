@@ -9,21 +9,35 @@ type RaftNodeId int
 
 // Utility to help spot congested communication in an unreliable network.
 type CongestionMonitor struct {
-	nodeId    RaftNodeId
-	lock      sync.Mutex
-	congested bool
+	nodeId                    RaftNodeId
+	lock                      sync.Mutex
+	congested                 bool
+	numConsecutiveCongestions int
 }
 
 func NewCongestionMonitor(nodeId RaftNodeId) *CongestionMonitor {
 	cm := new(CongestionMonitor)
 	cm.nodeId = nodeId
 	cm.congested = false
+	cm.numConsecutiveCongestions = 0
 	return cm
 }
 
 // Check if the connection to cm.nodeId is congested with previous requests.
 func (cm *CongestionMonitor) Congested() bool {
-	return cm.congested
+	congested := cm.congested
+	if !congested {
+		cm.numConsecutiveCongestions = 0
+		return false
+	}
+
+	cm.numConsecutiveCongestions++
+	if cm.numConsecutiveCongestions > 20 {
+		cm.numConsecutiveCongestions = 0
+		return false
+	}
+
+	return true
 }
 
 func WakeUpCongestionMonitor(
