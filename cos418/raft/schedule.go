@@ -68,6 +68,9 @@ func NewLeaderSchedule() *LeaderSchedule {
 
 // Wakes up the raft role maintainer thread to make it do leader work.
 func (ls *LeaderSchedule) Preempt() {
+	if len(ls.preemption) > 0 {
+		return
+	}
 	ls.preemption <- true
 }
 

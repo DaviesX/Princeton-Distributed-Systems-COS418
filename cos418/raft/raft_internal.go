@@ -111,7 +111,7 @@ func (rf *Raft) PublishAndCommit(term RaftTerm) {
 	rf.peersLogProgress = newPeersLogProgress
 
 	// Determines which log entries can be safely committed.
-	newCommitProgress := CommitProgress(newPeersLogProgress)
+	newCommitProgress := CommitProgress(rf.logs, term, newPeersLogProgress)
 
 	// Propagates commit progress to the leader itself and to the peers.
 	rf.commitProgress, rf.stateMachineProgress =

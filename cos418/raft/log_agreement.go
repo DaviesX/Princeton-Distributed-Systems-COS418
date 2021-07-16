@@ -124,10 +124,25 @@ func PublishLogs(
 	return newPeersLogProgress
 }
 
+func CommitProgressCap(logs []LogEntry, currentTerm RaftTerm) int {
+	for i := len(logs); i > 0; i-- {
+		if logs[i-1].Term == currentTerm {
+			return i
+		}
+	}
+	return 0
+}
+
 // Decides what the commit progress is based on peers' replication progress.
 // The commit progress will be the smallest index that goes after all the log
-// entries that get replicated by the quorum.
-func CommitProgress(peersLogProgress []int) int {
+// entries that get replicated by the quorum. In addition, commit progress is
+// capped by the log progress at which an entry is logged at the current term.
+// If no such entry exists, commit progress is set to zero.
+func CommitProgress(
+	logs []LogEntry,
+	currentTerm RaftTerm,
+	peersLogProgress []int,
+) int {
 	numPeers := len(peersLogProgress)
 
 	progresses := make([]int, numPeers)
@@ -138,7 +153,15 @@ func CommitProgress(peersLogProgress []int) int {
 		func(i int, j int) bool {
 			return progresses[i] > progresses[j]
 		})
-	return progresses[numPeers/2]
+	quorumProgress := progresses[numPeers/2]
+
+	progressCap := CommitProgressCap(logs, currentTerm)
+
+	if progressCap < quorumProgress {
+		return progressCap
+	} else {
+		return quorumProgress
+	}
 }
 
 // Notifies the commit progress that is safe for the peer at the moment, so
