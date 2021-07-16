@@ -133,16 +133,7 @@ func CommitProgressCap(logs []LogEntry, currentTerm RaftTerm) int {
 	return 0
 }
 
-// Decides what the commit progress is based on peers' replication progress.
-// The commit progress will be the smallest index that goes after all the log
-// entries that get replicated by the quorum. In addition, commit progress is
-// capped by the log progress at which an entry is logged at the current term.
-// If no such entry exists, commit progress is set to zero.
-func CommitProgress(
-	logs []LogEntry,
-	currentTerm RaftTerm,
-	peersLogProgress []int,
-) int {
+func CommitProgressQuorum(peersLogProgress []int) int {
 	numPeers := len(peersLogProgress)
 
 	progresses := make([]int, numPeers)
@@ -153,14 +144,26 @@ func CommitProgress(
 		func(i int, j int) bool {
 			return progresses[i] > progresses[j]
 		})
-	quorumProgress := progresses[numPeers/2]
+	return progresses[numPeers/2]
+}
 
+// Decides what the commit progress is based on peers' replication progress.
+// The commit progress will be the smallest index that goes after all the log
+// entries that get replicated by the quorum. In addition, commit progress is
+// capped by the log progress at which an entry is logged at the current term.
+// If no such entry exists, commit progress is set to zero.
+func CommitProgress(
+	logs []LogEntry,
+	currentTerm RaftTerm,
+	peersLogProgress []int,
+) int {
+	progressQuorum := CommitProgressQuorum(peersLogProgress)
 	progressCap := CommitProgressCap(logs, currentTerm)
 
-	if progressCap < quorumProgress {
+	if progressCap < progressQuorum {
 		return progressCap
 	} else {
-		return quorumProgress
+		return progressQuorum
 	}
 }
 
