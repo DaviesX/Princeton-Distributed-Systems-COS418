@@ -106,7 +106,7 @@ func PublishLogs(
 
 	for i, peer := range peers {
 		if RaftNodeId(i) == publishFrom {
-			newPeersLogProgress[i] = peersLogProgress[i]
+			newPeersLogProgress[i] = len(allLogs)
 			continue
 		}
 

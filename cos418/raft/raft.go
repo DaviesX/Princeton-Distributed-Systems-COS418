@@ -121,7 +121,6 @@ func (rf *Raft) Start(
 			func(updatedLogs []LogEntry) {
 				rf.persist()
 			})
-		rf.peersLogProgress[rf.me] = len(rf.logs)
 
 		rf.mu.Unlock()
 
