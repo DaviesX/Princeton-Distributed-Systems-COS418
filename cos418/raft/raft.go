@@ -124,7 +124,7 @@ func (rf *Raft) Start(
 
 		rf.mu.Unlock()
 
-		fmt.Printf("At node=%d: ** added log=(command=%d, index=%d, term=%d)\n",
+		fmt.Printf("At node=%d: ** added log=(command=%v, index=%d, term=%d)\n",
 			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
 
 		// The raft role maintainer thread will handle the replication

@@ -33,3 +33,13 @@ type GetReply struct {
 	Err         Err
 	Value       string
 }
+
+type OpType int
+
+const (
+	OpPut    OpType = 1
+	OpAppend OpType = 2
+	OpGet    OpType = 3
+)
+
+type KvNodeId = int
