@@ -8,7 +8,9 @@ import (
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
-	// You will have to modify this struct.
+
+	// Current known leader.
+	leaderServer KvNodeId
 }
 
 func nrand() int64 {
@@ -38,9 +40,20 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) Get(key string) string {
+	for {
+		var args GetArgs
+		args.Key = key
 
-	// You will have to modify this function.
-	return ""
+		var reply GetReply
+		ok := ck.servers[ck.leaderServer].Call("RaftKV.Get", &args, &reply)
+
+		if !ok || reply.WrongLeader {
+			ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
+			continue
+		}
+
+		return reply.Value
+	}
 }
 
 //
@@ -54,7 +67,22 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	// You will have to modify this function.
+	for {
+		var args PutAppendArgs
+		args.Op = op
+		args.Key = key
+		args.Value = value
+
+		var reply PutAppendReply
+		ok := ck.servers[ck.leaderServer].Call("RaftKV.PutAppend", &args, &reply)
+
+		if !ok || reply.WrongLeader {
+			ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
+			continue
+		}
+
+		return
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {
