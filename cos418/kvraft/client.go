@@ -3,6 +3,7 @@ package raftkv
 import (
 	"cos418/cos418/labrpc"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 )
 
@@ -45,6 +46,8 @@ func (ck *Clerk) Get(key string) string {
 		args.Key = key
 
 		var reply GetReply
+
+		fmt.Printf("To=%d: GetArgs=%v\n", ck.leaderServer, args)
 		ok := ck.servers[ck.leaderServer].Call("RaftKV.Get", &args, &reply)
 
 		if !ok || reply.WrongLeader {
@@ -74,6 +77,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		args.Value = value
 
 		var reply PutAppendReply
+		fmt.Printf("To=%d: PutAppendArgs=%v\n", ck.leaderServer, args)
 		ok := ck.servers[ck.leaderServer].Call("RaftKV.PutAppend", &args, &reply)
 
 		if !ok || reply.WrongLeader {

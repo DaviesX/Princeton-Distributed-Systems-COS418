@@ -34,10 +34,10 @@ type RaftKV struct {
 // the service is running on has the leader status.
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	futureResp := kv.requestPool.AddRequest(
-		func() int {
+		func() (int, raft.RaftTerm) {
 			op := NewGetOp(args.Key)
-			index, _, _ := kv.rf.Start(op)
-			return index
+			index, term, _ := kv.rf.Start(op)
+			return index, raft.RaftTerm(term)
 		})
 	if futureResp == nil {
 		reply.WrongLeader = true
@@ -45,16 +45,11 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 		return
 	}
 
-	ok := futureResp.Wait()
-	if !ok {
-		reply.WrongLeader = false
-		reply.Err = "NoSuchKey"
-		return
-	}
+	err := futureResp.Wait()
 
-	reply.WrongLeader = false
-	reply.Err = ""
 	reply.Value = futureResp.val
+	reply.WrongLeader = false
+	reply.Err = err
 }
 
 // RPC to insert the key-value pair into the key-value store or to append the
@@ -63,24 +58,21 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 // when the current node the service is running on has the leader status.
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	futureResp := kv.requestPool.AddRequest(
-		func() int {
+		func() (int, raft.RaftTerm) {
 			op := NewPutAppendOp(args.Op, args.Key, args.Value)
-			index, _, _ := kv.rf.Start(op)
-			return index
+			index, term, _ := kv.rf.Start(op)
+			return index, raft.RaftTerm(term)
 		})
 	if futureResp == nil {
 		reply.WrongLeader = true
-		reply.Err = "WrongLeader"
+		reply.Err = Err("WrongLeader")
 		return
 	}
 
-	ok := futureResp.Wait()
-	if !ok {
-		panic("unknown error.")
-	}
+	err := futureResp.Wait()
 
 	reply.WrongLeader = false
-	reply.Err = ""
+	reply.Err = err
 }
 
 //
@@ -130,7 +122,7 @@ func StartKVServer(
 	kv.shouldShutdown = false
 
 	go ProcessOpQueue(
-		kv.applyCh, &kv.kvs, kv.requestPool, &kv.shouldShutdown)
+		kv.me, kv.applyCh, &kv.kvs, kv.requestPool, &kv.shouldShutdown)
 
 	return kv
 }
