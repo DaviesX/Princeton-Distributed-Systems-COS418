@@ -41,7 +41,7 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 		})
 	if futureResp == nil {
 		reply.WrongLeader = true
-		reply.Err = "WrongLeader"
+		reply.Err = ErrWrongLeader
 		return
 	}
 
@@ -65,7 +65,7 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		})
 	if futureResp == nil {
 		reply.WrongLeader = true
-		reply.Err = Err("WrongLeader")
+		reply.Err = ErrWrongLeader
 		return
 	}
 

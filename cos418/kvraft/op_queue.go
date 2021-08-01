@@ -36,6 +36,25 @@ func NewPutAppendOp(opType string, key string, value string) Op {
 	return op
 }
 
+func FetchValue(
+	key string,
+	kvs map[string]string,
+	resp *FutureResponse,
+	err *Err,
+) {
+	if resp == nil {
+		return
+	}
+
+	val, ok := kvs[key]
+	if !ok {
+		*err = ErrNoSuchKey
+		return
+	}
+
+	resp.val = val
+}
+
 // Pops an item from the operator queue and applies the operator to the kv
 // store. In addition, it responds to previously enqueued requests from the
 // request pool.
@@ -51,30 +70,27 @@ func ProcessOpQueue(
 
 	for !*shouldShutdown {
 		item := <-queue
-
-		resp := pool.PopAwaitingRequest(item.Index)
 		op := item.Command.(Op)
+		resp := pool.PopAwaitingRequest(item.Index)
 
 		fmt.Printf("At node=%d: processing item=%v\n", id, item)
 
-		err := Err("")
+		err := ErrNone
 		switch op.Type {
 		case OpPut:
 			(*kvs)[op.Key] = op.Value
 		case OpAppend:
 			(*kvs)[op.Key] += op.Value
 		case OpGet:
-			if resp != nil {
-				var ok bool
-				resp.val, ok = (*kvs)[op.Key]
-				if !ok {
-					err = Err("KeyNotFound")
-				}
-			}
+			FetchValue(op.Key, *kvs, resp, &err)
 		}
 
 		if resp != nil {
-			resp.Fulfill(err)
+			if item.Term == resp.term {
+				resp.Fulfill(err)
+			} else {
+				resp.Fulfill(ErrOpOverwritten)
+			}
 		}
 	}
 }

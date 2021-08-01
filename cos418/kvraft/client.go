@@ -50,7 +50,7 @@ func (ck *Clerk) Get(key string) string {
 		fmt.Printf("To=%d: GetArgs=%v\n", ck.leaderServer, args)
 		ok := ck.servers[ck.leaderServer].Call("RaftKV.Get", &args, &reply)
 
-		if !ok || reply.WrongLeader {
+		if !ok || reply.WrongLeader || reply.Err == ErrOpOverwritten {
 			ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
 			continue
 		}
@@ -80,7 +80,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		fmt.Printf("To=%d: PutAppendArgs=%v\n", ck.leaderServer, args)
 		ok := ck.servers[ck.leaderServer].Call("RaftKV.PutAppend", &args, &reply)
 
-		if !ok || reply.WrongLeader {
+		if !ok || reply.WrongLeader || reply.Err == ErrOpOverwritten {
 			ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
 			continue
 		}

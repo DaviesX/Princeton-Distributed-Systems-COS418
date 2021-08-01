@@ -17,6 +17,7 @@ func SendLogsToStateMachine(
 	for i := start; i < end; i++ {
 		var msg ApplyMsg
 		msg.Index = i + 1
+		msg.Term = logs[i].Term
 		msg.Command = logs[i].Command
 
 		targetChannel <- msg
