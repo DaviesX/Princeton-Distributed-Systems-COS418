@@ -70,7 +70,7 @@ func ProcessOpQueue(
 	shouldShutdown *bool,
 ) {
 	fmt.Printf(
-		"At node=%d: starting OperationQueueProcessor...\n", id)
+		"At node=%d: starting the operation queue processor...\n", id)
 
 	for !*shouldShutdown {
 		item := <-queue
@@ -97,4 +97,7 @@ func ProcessOpQueue(
 
 		fulfillmentPool.Fulfill(op.CID, err)
 	}
+
+	fmt.Printf(
+		"At node=%d: stopping the operation queue processor...\n", id)
 }

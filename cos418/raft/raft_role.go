@@ -119,6 +119,9 @@ func DoLeaderCycle(
 //	Constantly publishing and committing logs as well as sending heartbeats to
 // 	the followers.
 func DoRaftRole(raft RaftInternalInterface) {
+	fmt.Printf(
+		"At node=%d, starting the raft role maintainer...\n", raft.WhoIAm())
+
 	for !raft.ShouldShutdown() {
 		term, role := raft.TermRoleHolder().CurrentTermRole()
 
@@ -131,4 +134,7 @@ func DoRaftRole(raft RaftInternalInterface) {
 			DoLeaderCycle(raft, term)
 		}
 	}
+
+	fmt.Printf(
+		"At node=%d, stopping the raft role maintainer...\n", raft.WhoIAm())
 }

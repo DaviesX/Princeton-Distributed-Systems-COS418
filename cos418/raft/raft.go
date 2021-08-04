@@ -142,7 +142,6 @@ func (rf *Raft) Start(
 // in Kill(), but it might be convenient to (for example)
 // turn off debug output from this instance.
 func (rf *Raft) Kill() {
-	fmt.Printf("At node=%d, stopping the raft role maintainer...\n", rf.me)
 	rf.done = true
 }
 
@@ -184,7 +183,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	fmt.Printf("At node=%d, starting the raft role maintainer...\n", rf.me)
 	go DoRaftRole(rf)
 
 	return rf
