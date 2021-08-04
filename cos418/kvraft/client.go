@@ -3,7 +3,6 @@ package raftkv
 import (
 	"cos418/cos418/labrpc"
 	"crypto/rand"
-	"fmt"
 	"math/big"
 )
 
@@ -14,7 +13,7 @@ type Clerk struct {
 	leaderServer KvNodeId
 }
 
-func nrand() int64 {
+func GenerateCallerId() CallerId {
 	max := big.NewInt(int64(1) << 62)
 	bigx, _ := rand.Int(rand.Reader, max)
 	x := bigx.Int64()
@@ -26,6 +25,39 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck.servers = servers
 	// You'll have to add code here.
 	return ck
+}
+
+func (ck *Clerk) NextLeader() {
+	ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
+}
+
+func (ck *Clerk) RunCall(
+	procedureName string,
+	buildArgsFn func(callerId CallerId) interface{},
+	createReplyPtrFn func() interface{},
+	processReplyFn func(interface{}) (string, Err),
+) string {
+	thisCallerId := GenerateCallerId()
+
+	for {
+		args := buildArgsFn(thisCallerId)
+		reply := createReplyPtrFn()
+
+		ok := ck.servers[ck.leaderServer].Call(procedureName, args, reply)
+
+		result, err := processReplyFn(reply)
+
+		if !ok || err == ErrWrongLeader {
+			ck.NextLeader()
+			continue
+		}
+
+		if err == ErrTimeout {
+			continue
+		}
+
+		return result
+	}
 }
 
 //
@@ -41,22 +73,19 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) Get(key string) string {
-	for {
-		var args GetArgs
-		args.Key = key
-
-		var reply GetReply
-
-		fmt.Printf("To=%d: GetArgs=%v\n", ck.leaderServer, args)
-		ok := ck.servers[ck.leaderServer].Call("RaftKV.Get", &args, &reply)
-
-		if !ok || reply.WrongLeader || reply.Err == ErrOpOverwritten {
-			ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
-			continue
-		}
-
-		return reply.Value
-	}
+	return ck.RunCall("RaftKV.Get",
+		func(callerId CallerId) interface{} {
+			args := new(GetArgs)
+			args.CID = callerId
+			args.Key = key
+			return args
+		},
+		func() interface{} {
+			return new(GetReply)
+		},
+		func(reply interface{}) (string, Err) {
+			return reply.(*GetReply).Value, reply.(*GetReply).Err
+		})
 }
 
 //
@@ -70,23 +99,21 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	for {
-		var args PutAppendArgs
-		args.Op = op
-		args.Key = key
-		args.Value = value
-
-		var reply PutAppendReply
-		fmt.Printf("To=%d: PutAppendArgs=%v\n", ck.leaderServer, args)
-		ok := ck.servers[ck.leaderServer].Call("RaftKV.PutAppend", &args, &reply)
-
-		if !ok || reply.WrongLeader || reply.Err == ErrOpOverwritten {
-			ck.leaderServer = (ck.leaderServer + 1) % len(ck.servers)
-			continue
-		}
-
-		return
-	}
+	ck.RunCall("RaftKV.PutAppend",
+		func(callerId CallerId) interface{} {
+			args := new(PutAppendArgs)
+			args.CID = callerId
+			args.Op = op
+			args.Key = key
+			args.Value = value
+			return args
+		},
+		func() interface{} {
+			return new(PutAppendReply)
+		},
+		func(reply interface{}) (string, Err) {
+			return "", reply.(*PutAppendReply).Err
+		})
 }
 
 func (ck *Clerk) Put(key string, value string) {

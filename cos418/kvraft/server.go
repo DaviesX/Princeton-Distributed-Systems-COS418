@@ -23,33 +23,54 @@ type RaftKV struct {
 
 	maxraftstate int // snapshot if log grows this big
 
-	kvs         map[string]string
-	requestPool *RequestPool
+	kvs             map[string]string
+	fulfillmentPool *FulfillmentPool
 
 	shouldShutdown bool
+}
+
+func RunOperation(
+	callerId CallerId,
+	rf *raft.Raft,
+	fulfillmentPool *FulfillmentPool,
+	buildOperationFn func(callerId CallerId) Op,
+	reportWrongLeaderFn func(),
+	processResponseFn func(*FutureResponse, Err),
+) {
+	fulfillment := fulfillmentPool.Fetch(callerId)
+	if fulfillment.Fulfilled() {
+		processResponseFn(fulfillment.future, fulfillment.err)
+		return
+	}
+
+	op := buildOperationFn(callerId)
+	_, _, isLeader := rf.Start(op)
+	if !isLeader {
+		reportWrongLeaderFn()
+		return
+	}
+
+	err := fulfillment.future.Wait()
+
+	processResponseFn(fulfillment.future, err)
 }
 
 // RPC to fetch the value from the key-value store associated with the key, if
 // it exists in the KV store. The RPC will only succeed when the current node
 // the service is running on has the leader status.
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
-	futureResp := kv.requestPool.AddRequest(
-		func() (int, raft.RaftTerm) {
-			op := NewGetOp(args.Key)
-			index, term, _ := kv.rf.Start(op)
-			return index, raft.RaftTerm(term)
+	RunOperation(args.CID, kv.rf, kv.fulfillmentPool,
+		func(callerId CallerId) Op {
+			return NewGetOp(callerId, args.Key)
+		},
+		func() {
+			reply.WrongLeader = true
+			reply.Err = ErrWrongLeader
+		}, func(resp *FutureResponse, err Err) {
+			reply.Value = resp.val
+			reply.WrongLeader = false
+			reply.Err = err
 		})
-	if futureResp == nil {
-		reply.WrongLeader = true
-		reply.Err = ErrWrongLeader
-		return
-	}
-
-	err := futureResp.Wait()
-
-	reply.Value = futureResp.val
-	reply.WrongLeader = false
-	reply.Err = err
 }
 
 // RPC to insert the key-value pair into the key-value store or to append the
@@ -57,22 +78,17 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 // otherwise, a new key-value pair will be inserted.  The RPC will only succeed
 // when the current node the service is running on has the leader status.
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	futureResp := kv.requestPool.AddRequest(
-		func() (int, raft.RaftTerm) {
-			op := NewPutAppendOp(args.Op, args.Key, args.Value)
-			index, term, _ := kv.rf.Start(op)
-			return index, raft.RaftTerm(term)
+	RunOperation(args.CID, kv.rf, kv.fulfillmentPool,
+		func(callerId CallerId) Op {
+			return NewPutAppendOp(callerId, args.Op, args.Key, args.Value)
+		},
+		func() {
+			reply.WrongLeader = true
+			reply.Err = ErrWrongLeader
+		}, func(resp *FutureResponse, err Err) {
+			reply.WrongLeader = false
+			reply.Err = err
 		})
-	if futureResp == nil {
-		reply.WrongLeader = true
-		reply.Err = ErrWrongLeader
-		return
-	}
-
-	err := futureResp.Wait()
-
-	reply.WrongLeader = false
-	reply.Err = err
 }
 
 //
@@ -117,12 +133,16 @@ func StartKVServer(
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	kv.kvs = make(map[string]string)
-	kv.requestPool = NewRequestPool()
+	kv.fulfillmentPool = NewFulfillmentPool()
 
 	kv.shouldShutdown = false
 
 	go ProcessOpQueue(
-		kv.me, kv.applyCh, &kv.kvs, kv.requestPool, &kv.shouldShutdown)
+		kv.me,
+		kv.applyCh,
+		&kv.kvs,
+		kv.fulfillmentPool,
+		&kv.shouldShutdown)
 
 	return kv
 }

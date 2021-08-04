@@ -10,20 +10,28 @@ import (
 // in a consistent manner so that every KV store replica will agree on the
 // state.
 type Op struct {
+	CID   CallerId
 	Type  OpType
 	Key   string
 	Value string
 }
 
-func NewGetOp(key string) Op {
+func NewGetOp(callerId CallerId, key string) Op {
 	var op Op
+	op.CID = callerId
 	op.Type = OpGet
 	op.Key = key
 	return op
 }
 
-func NewPutAppendOp(opType string, key string, value string) Op {
+func NewPutAppendOp(
+	callerId CallerId,
+	opType string,
+	key string,
+	value string,
+) Op {
 	var op Op
+	op.CID = callerId
 	if opType == "Put" {
 		op.Type = OpPut
 	} else if opType == "Append" {
@@ -42,10 +50,6 @@ func FetchValue(
 	resp *FutureResponse,
 	err *Err,
 ) {
-	if resp == nil {
-		return
-	}
-
 	val, ok := kvs[key]
 	if !ok {
 		*err = ErrNoSuchKey
@@ -62,7 +66,7 @@ func ProcessOpQueue(
 	id KvNodeId,
 	queue chan raft.ApplyMsg,
 	kvs *map[string]string,
-	pool *RequestPool,
+	fulfillmentPool *FulfillmentPool,
 	shouldShutdown *bool,
 ) {
 	fmt.Printf(
@@ -71,9 +75,15 @@ func ProcessOpQueue(
 	for !*shouldShutdown {
 		item := <-queue
 		op := item.Command.(Op)
-		resp := pool.PopAwaitingRequest(item.Index)
+
+		if fulfillmentPool.Fulfilled(op.CID) {
+			// Skip a duplicate operation.
+			continue
+		}
 
 		fmt.Printf("At node=%d: processing item=%v\n", id, item)
+
+		future := fulfillmentPool.Fetch(op.CID).future
 
 		err := ErrNone
 		switch op.Type {
@@ -82,15 +92,9 @@ func ProcessOpQueue(
 		case OpAppend:
 			(*kvs)[op.Key] += op.Value
 		case OpGet:
-			FetchValue(op.Key, *kvs, resp, &err)
+			FetchValue(op.Key, *kvs, future, &err)
 		}
 
-		if resp != nil {
-			if item.Term == resp.term {
-				resp.Fulfill(err)
-			} else {
-				resp.Fulfill(ErrOpOverwritten)
-			}
-		}
+		fulfillmentPool.Fulfill(op.CID, err)
 	}
 }

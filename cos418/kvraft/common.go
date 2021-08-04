@@ -8,14 +8,17 @@ const (
 type Err string
 
 const (
-	ErrNone          Err = "None"
-	ErrWrongLeader   Err = "WrongLeader"
-	ErrNoSuchKey     Err = "NoSuchKey"
-	ErrOpOverwritten Err = "OpOverwritten"
+	ErrNone        Err = "None"
+	ErrWrongLeader Err = "WrongLeader"
+	ErrNoSuchKey   Err = "NoSuchKey"
+	ErrTimeout     Err = "Timeout"
 )
+
+type CallerId = int64
 
 // Put or Append
 type PutAppendArgs struct {
+	CID   CallerId
 	Key   string
 	Value string
 	Op    string // "Put" or "Append"
@@ -27,6 +30,7 @@ type PutAppendReply struct {
 }
 
 type GetArgs struct {
+	CID CallerId
 	Key string
 }
 
