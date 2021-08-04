@@ -27,7 +27,9 @@ func MakeFutureTimeout(timeout time.Duration, signal chan Err) {
 	signal <- ErrTimeout
 }
 
-// Waits until the future is fulfilled.
+// Waits until the future is fulfilled, or it gets timed out after 2 seoncds.
+// In case of timeout, it returns ErrTimeout. Otherwise, it returns the error
+// encountered during the future's fulfillment.
 func (fr *FutureResponse) Wait() Err {
 	go MakeFutureTimeout(2*time.Second, fr.signal)
 	err := <-fr.signal
