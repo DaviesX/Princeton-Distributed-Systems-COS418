@@ -17,9 +17,10 @@ const (
 	RaftLeader    RaftRole = "RaftLeader"
 )
 
-// Ensures the term is updated to increase monotonically while proper
-// components get notified. Also, raft role is coupled with the term number,
-// it guarantees atomic update action to the term-role pair.
+// It keeps track of what role the node should play at the latest term. Raft 
+// role is coupled with the term number. It also allows the atomic access to 
+// the term-role pair and facilitates monotonic term increments and proper role
+// transition based on term upgrade events.
 type TermRoleHolder struct {
 	lock sync.Mutex
 	term RaftTerm
