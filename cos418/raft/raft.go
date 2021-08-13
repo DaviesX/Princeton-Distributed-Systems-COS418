@@ -110,20 +110,19 @@ func (rf *Raft) readPersist(data []byte) {
 func (rf *Raft) Start(
 	command interface{},
 ) (int, int, bool) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	currentTerm, role := rf.TermRoleHolder().CurrentTermRole()
 
 	switch role {
 	case RaftLeader:
-		rf.mu.Lock()
-
 		AppendLog(
 			command, currentTerm,
 			&rf.logs,
 			func(updatedLogs []LogEntry) {
 				rf.persist()
 			})
-
-		rf.mu.Unlock()
 
 		fmt.Printf("At node=%d: ** added log=(command=%v, index=%d, term=%d)\n",
 			rf.me, command, len(rf.logs), rf.logs[len(rf.logs)-1].Term)
