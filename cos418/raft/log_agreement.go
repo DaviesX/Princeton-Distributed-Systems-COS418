@@ -147,11 +147,11 @@ func CommitProgressQuorum(peersLogProgress []int) int {
 	return progresses[numPeers/2]
 }
 
-// Decides what the commit progress is based on peers' replication progress.
-// The commit progress will be the smallest index that goes after all the log
-// entries that get replicated by the quorum. In addition, commit progress is
-// capped by the log progress at which an entry is logged at the current term.
-// If no such entry exists, commit progress is set to zero.
+// Decides the commit progress based on peers' replication progress. The commit
+// progress will be the smallest index that goes after all the log entries that
+// get replicated by the quorum. In addition, commit progress is capped by the
+// log progress at which an entry is logged at the current term. If no such 
+// entry exists, commit progress is set to zero.
 func CommitProgress(
 	logs []LogEntry,
 	currentTerm RaftTerm,
@@ -167,7 +167,7 @@ func CommitProgress(
 	}
 }
 
-// Notifies the commit progress that is safe for the peer at the moment, so
+// Notifies a commit progress that is safe for the peer at the moment, so
 // peers can push commited logs to their state mahcine. However, it doesn't
 // guarantee synchronization.
 func NotifyCommitProgress(
